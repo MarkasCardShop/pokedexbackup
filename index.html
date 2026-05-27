@@ -210,30 +210,26 @@
 </div>
 
 <div id="scannerModal" class="modal">
-    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; display: flex; flex-direction: column; align-items: center;">
-        <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px;">&times;</span>
+    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; max-height: 95vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; position: relative;">
+        <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px; position: relative; z-index: 10;">&times;</span>
         <h3 style="color: #ffcb05; margin-top: 0;">POKÉDEX SCANNER</h3>
         
-        <!-- Wrapper for Camera and Targeting Guide -->
-        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; overflow: hidden; background: #000;">
-            <video id="camera-stream" autoplay playsinline style="width: 100%; display: block;"></video>
+        <div style="position: relative; width: 100%; height: 40vh; overflow: hidden; border: 3px solid #444; border-radius: 8px; background: #000;">
+            <video id="camera-stream" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
             
-            <!-- The Targeting Guide Overlay -->
-            <div style="position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid #ffcb05; box-shadow: 0 0 0 1000px rgba(0,0,0,0.7); pointer-events: none;">
-                <!-- Top Zone (Name) -->
-                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 15%; background: rgba(227, 53, 13, 0.3); border-bottom: 1px dashed #e3350d; display: flex; align-items: center; justify-content: center;"><span style="color:white; font-size: 0.8em; opacity: 0.8;">NAME ZONE</span></div>
-                <!-- Bottom Zone (ID/Set) -->
-                <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 12%; background: rgba(227, 53, 13, 0.3); border-top: 1px dashed #e3350d; display: flex; align-items: center; justify-content: center;"><span style="color:white; font-size: 0.8em; opacity: 0.8;">ID ZONE</span></div>
+            <div id="card-guide" style="position: absolute; top: 5%; left: 10%; width: 80%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 10px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="width: 100%; height: 25%; border-bottom: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
+                <div style="width: 100%; height: 20%; border-top: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
             </div>
         </div>
         
-        <!-- Hidden canvases for processing -->
-        <canvas id="snapshot-canvas" style="display: none;"></canvas>
-        <canvas id="stitched-canvas" style="display: none;"></canvas>
+        <div id="debug-panel" style="margin-top: 15px; width: 100%; border-top: 2px dashed #666; padding-top: 10px;">
+            <p style="color: #ffcb05; font-size: 0.8em; margin: 0 0 5px 0; text-align: left; font-weight: bold;">DEBUG VIEW (What Tesseract Sees):</p>
+            <canvas id="snapshot-canvas" style="width: 100%; border: 2px solid #2ecc71; background: #222; border-radius: 5px;"></canvas>
+        </div>
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align card in the box and tap scan!</div>
         
-        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Fit the card inside the box and tap scan!</div>
-        
-        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Target Zones</button>
+        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Text</button>
     </div>
 </div>
         <div class="header-title-container">
