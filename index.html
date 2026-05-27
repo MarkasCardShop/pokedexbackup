@@ -749,14 +749,30 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         const aiData = JSON.parse(aiText);
         
         // --- 2. AUTO-SWITCH DATA SOURCES WITH STRICT PRIORITY ---
-        let validSetFound = false; // This is the correctly declared variable!
+        let validSetFound = false; 
 
-        // Attempt A: STRICTLY prioritize the 3-letter Set Code (e.g., 'MA3')
+        // === NEW: OCR CORRECTION FOR SV ERA SETS ===
+        if (aiData.set && aiData.set.toLowerCase().startsWith('sv')) {
+            let setStr = aiData.set.toLowerCase(); // e.g., "svlls"
+            let body = setStr.slice(2);            // Get everything after "sv" (e.g., "lls")
+            let lastChar = body.slice(-1);         // Get the final alphabet letter (e.g., "s" or "a")
+            let middleNumbers = body.slice(0, -1); // Get the middle part that SHOULD be numbers (e.g., "ll")
+
+            // Convert accidental letters 'l' or 'i' into the number '1'
+            middleNumbers = middleNumbers.replace(/l/g, '1').replace(/i/g, '1');
+
+            // Reconstruct the corrected set code (e.g., "sv" + "11" + "s" = "sv11s")
+            aiData.set = 'sv' + middleNumbers + lastChar;
+        }
+        // ===========================================
+
+        // Attempt A: STRICTLY prioritize the Set Code (Now sanitized!)
         if (aiData.set && typeof setCodeMap !== 'undefined') {
-            const foundSetCode = aiData.set.toUpperCase();
+            const foundSetCode = aiData.set.toUpperCase(); // Will look for "SV11S" now!
             
             // Check if this code actually exists in your database map
             if (setCodeMap[foundSetCode]) {
+// ... rest of your Attempt A code continues exactly as it was ...
                 validSetFound = true; // Success! Lock out the fallback.
                 
                 // Only change the dropdown if we aren't already on this set
