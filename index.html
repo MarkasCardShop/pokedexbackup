@@ -670,7 +670,7 @@ async function captureAndScan() {
     applyOcrFilters(canvas); 
     
     btn.disabled = true;
-    statusMsg.innerText = "Analyzing ID & Set Code... please wait.";
+    statusMsg.innerText = "Analyzing Name & Details... please wait.";
     statusMsg.style.color = "#ffcb05";
 
     try {
@@ -681,73 +681,77 @@ async function captureAndScan() {
         await worker.terminate();
 
         console.log("Raw OCR Text:", textFound); 
-        const normalizedText = textFound.toLowerCase();
+        // Replace newlines with spaces for easier word matching
+        const normalizedText = textFound.toLowerCase().replace(/\n/g, ' '); 
         
         let bestMatchCard = null;
+        let highestScore = 0;
 
-        // --- STEP 1: CHECK SET CODE (e.g., "MA4") ---
-        // Looks for 3 alphanumeric chars near a 3-digit number
+        // --- HIERARCHY PRIORITY 1: SET CODE (To Auto-Switch Series) ---
         const setMatch = textFound.match(/([a-zA-Z0-9]{3})\s*[I|1|l]?\s*\d{3}/);
         if (setMatch && typeof setCodeMap !== 'undefined') {
             let foundSetCode = setMatch[1].toUpperCase();
             if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
                 document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
                 statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
-                await changeSeries(); // Wait for the new set database to load
+                await changeSeries(); 
             }
         }
 
-        // --- STEP 2: CHECK CARD NUMBER (PRIORITY 1) ---
-        // Looks strictly for the pattern "073/123" or "073 / 123" or "073|123"
-        const numberMatch = textFound.match(/(\d{3})\s*[\/|\\Il]\s*\d{3}/);
-        
-        if (numberMatch) {
-            const extractedId = numberMatch[1]; // This grabs just the "073"
-            // Search the database for this exact ID
-            bestMatchCard = allCards.find(c => c.id === extractedId);
-        }
-
-        // --- STEP 3: CHECK NAME (FALLBACK ONLY) ---
-        // If the ID was obscured, try matching the name with high strictness
-        if (!bestMatchCard) {
-            let highestScore = 0;
-
-            for (let card of allCards) {
-                let score = 0;
-                
-                // Exact Name
-                if (normalizedText.includes(card.name.toLowerCase())) {
-                    score += 100; 
-                }
-
-                // Fuzzy Words
-                const cardWords = card.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+        // --- HIERARCHY PRIORITY 2: SCORING EVERY CARD ---
+        for (let card of allCards) {
+            let score = 0;
+            
+            // 1. NAME (Highest Points)
+            const exactName = card.name.toLowerCase();
+            if (normalizedText.includes(exactName)) {
+                score += 1000; // Massive points for exact name match
+            } else {
+                // Fuzzy Name Match
+                const cardWords = exactName.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
                 let matchedWords = 0;
                 for (let word of cardWords) {
                     if (normalizedText.includes(word)) {
-                        score += 20;
+                        score += 100;
                         matchedWords++;
                     }
                 }
-                
-                if (cardWords.length > 1 && matchedWords >= Math.ceil(cardWords.length / 2)) {
-                    score += 30; 
+                // If it found the majority of the name words, give it a big bonus
+                if (cardWords.length > 0 && matchedWords >= Math.ceil(cardWords.length / 2)) {
+                    score += 300; 
                 }
+            }
 
-                // Require a minimum of 40 points so it doesn't accidentally pick a card based on 1 generic word
-                if (score > highestScore && score >= 40) { 
-                    highestScore = score;
-                    bestMatchCard = card;
+            // 2. RARITY (Secondary Points)
+            // Uses a word boundary (\b) so it doesn't accidentally match the letter 'c' inside the word 'attack'
+            if (card.rarity) {
+                const rarityRegex = new RegExp(`\\b${card.rarity.toLowerCase()}\\b`);
+                if (rarityRegex.test(normalizedText)) {
+                    score += 50;
                 }
+            }
+
+            // 3. NUMBER (Tie-Breaker / Last Resort)
+            if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
+                score += 200; // High confidence if found next to a slash
+            } else if (normalizedText.includes(card.id)) {
+                score += 20;  // Small tie-breaker points if just the number is floating somewhere
+            }
+
+            // Check if this card is the new winner. 
+            // We require a minimum of 200 points (Meaning it AT LEAST found the name or the ID + Rarity)
+            if (score > highestScore && score >= 200) { 
+                highestScore = score;
+                bestMatchCard = card;
             }
         }
 
-        // --- STEP 4: APPLY TO UI ---
+        // --- APPLY WINNER TO UI ---
         if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
             statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
             
-            // Put exactly the ID in the search box
+            // Put exactly the ID in the search box to filter the grid down to 1 card
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
 
@@ -756,7 +760,7 @@ async function captureAndScan() {
             }, 2000);
 
         } else {
-            statusMsg.innerText = "Couldn't read ID (XXX/YYY) or Name clearly. Try again!";
+            statusMsg.innerText = "Couldn't clearly read Name. Try tapping the text to focus!";
             statusMsg.style.color = "#ff6b6b";
             btn.disabled = false;
         }
