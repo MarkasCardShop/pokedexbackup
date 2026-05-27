@@ -213,8 +213,8 @@
         <span class="close" onclick="closeScanner()" style="position: absolute; right: 20px; top: 10px; z-index: 10;">&times;</span>
         <h3 style="color: #ffcb05; margin-top: 10px;">POKÉDEX SCANNER</h3>
         
-        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0; margin-bottom: 15px; overflow: hidden;">
-            <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto;"></video>
+        <div style="position: relative; width: 100%; max-height: 400px; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0; margin-bottom: 15px; overflow: hidden; display: flex; justify-content: center; align-items: center;">
+            <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto; max-height: 100%; object-fit: contain;"></video>
             
             <div id="card-guide" style="position: absolute; top: 5%; left: 5%; width: 90%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 5px;"></div>
         </div>
@@ -223,7 +223,12 @@
 
         <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align the card inside the yellow box!</div>
         
-        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Card</button>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; flex: 1;">Scan Camera</button>
+            
+            <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+            <button class="main-btn" onclick="document.getElementById('image-upload').click()" style="margin-top: 0; flex: 1; background-color: #2a75bb; color: #ffcb05; border-color: #ffcb05;">Upload Image</button>
+        </div>
     </div>
 </div>
         <div class="header-title-container">
@@ -683,27 +688,15 @@ const setCodeMap = {
 // Paste this at the top of your <script> section in your HTML file
 const GEMINI_API_KEY = 'AIzaSyDoKPeEJVJQCsvxgHYoWBlLyhS9gsOKWIQ'; 
 
-async function captureAndScan() {
-    const video = document.getElementById('camera-stream');
-    const canvas = document.getElementById('snapshot-canvas');
-    const statusMsg = document.getElementById('scan-status');
-    const btn = document.getElementById('capture-btn');
+// ... existing variables and functions ...
 
-    // Take the picture natively (No complex cropping needed for Gemini!)
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    btn.disabled = true;
+// Extract the Gemini API call logic for reuse
+async function processImageWithGemini(base64Data, statusMsg, btn) {
     statusMsg.innerText = "Transmitting to AI... please wait.";
     statusMsg.style.color = "#ffcb05";
+    btn.disabled = true;
 
     try {
-        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const base64Data = imageDataUrl.split(',')[1]; 
-
-        // Call Gemini directly from the browser
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const payload = {
@@ -771,7 +764,7 @@ async function captureAndScan() {
             // Wait 1.5 seconds so the user can see success, then close modal
             setTimeout(() => {
                 closeScanner();
-                btn.innerText = "Scan Card";
+                btn.innerText = "Scan Camera";
                 btn.disabled = false;
             }, 1500);
 
@@ -784,14 +777,69 @@ async function captureAndScan() {
 
     } catch (error) {
         console.error("Scanner Error:", error);
-        
-        // Show the ACTUAL error on the screen instead of the generic message
         statusMsg.innerText = "Error: " + error.message; 
-        
         statusMsg.style.color = "#ff6b6b";
         btn.innerText = "Try Again";
         btn.disabled = false;
     }
+}
+
+async function captureAndScan() {
+    const video = document.getElementById('camera-stream');
+    const canvas = document.getElementById('snapshot-canvas');
+    const statusMsg = document.getElementById('scan-status');
+    const btn = document.getElementById('capture-btn');
+
+    // Take the picture natively
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const base64Data = imageDataUrl.split(',')[1]; 
+
+    await processImageWithGemini(base64Data, statusMsg, btn);
+}
+
+// New function for handling image uploads
+function handleImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const statusMsg = document.getElementById('scan-status');
+    const btn = document.getElementById('capture-btn');
+    const canvas = document.getElementById('snapshot-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    statusMsg.innerText = "Processing uploaded image...";
+    statusMsg.style.color = "#ffcb05";
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = async () => {
+            // Draw uploaded image to canvas
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0, img.width, img.height);
+            
+            const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = imageDataUrl.split(',')[1];
+            
+            // Optionally close the video stream if it's running
+            if(videoStream) {
+               videoStream.getTracks().forEach(track => track.stop());
+            }
+
+            await processImageWithGemini(base64Data, statusMsg, btn);
+            
+            // Reset the input value so the same file can be uploaded again if needed
+            document.getElementById('image-upload').value = '';
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
         // --- IMAGE PRE-PROCESSING FOR HOLO CARDS ---
 function applyOcrFilters(canvas) {
