@@ -664,6 +664,8 @@ async function captureAndScan() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // 2. Apply High-Contrast Filter for Holo Cards
     applyOcrFilters(canvas); 
     
     btn.disabled = true;
@@ -677,87 +679,70 @@ async function captureAndScan() {
         const textFound = ret.data.text;
         await worker.terminate();
 
-        console.log("Raw OCR Text:", textFound); // Helpful for seeing what the camera actually read
+        console.log("Raw OCR Text:", textFound); 
+        const normalizedText = textFound.toLowerCase();
 
-        let foundId = "";
-        let foundName = "";
-        let foundSetCode = "";
-
-        // --- STEP 1: Find the Card Number (ID) ---
-        // Looks for the pattern "001/123" and extracts the "001"
-        const numberMatch = textFound.match(/(\d{3})\s*\/\s*\d{3}/);
-        if (numberMatch) {
-            foundId = numberMatch[1];
-        }
-
-        // --- STEP 2: Find the Set Code ---
-        // Looks for 3 alphanumeric characters (like MA4) roughly near the card number
-        // Tesseract might read the border lines as "I" or "|", so we account for that
+        // --- STEP 1: Find Set Code (Optional: Auto-Switch Series) ---
         const setMatch = textFound.match(/([A-Za-z0-9]{3})\s*[I|1|l]?\s*\d{3}\s*\//);
-        if (setMatch) {
-            foundSetCode = setMatch[1].toUpperCase();
+        if (setMatch && typeof setCodeMap !== 'undefined') {
+            let foundSetCode = setMatch[1].toUpperCase();
+            if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
+                document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
+                statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
+                await changeSeries(); 
+            }
         }
 
-        // --- STEP 3: Find the Name (UPGRADED FUZZY MATCH) ---
-        // Cross-reference the OCR text with the currently loaded cards
-        let bestMatchName = "";
+        // --- STEP 2: Confidence Scoring System ---
+        let bestMatchCard = null;
         let highestScore = 0;
-        const normalizedTextFound = textFound.toLowerCase();
 
         for (let card of allCards) {
-            // Check exact match first (fastest)
-            if (normalizedTextFound.includes(card.name.toLowerCase())) {
-                foundName = card.name;
-                break;
+            let score = 0;
+
+            // 1. Check ID (Highest confidence if found next to a slash, e.g., "043/")
+            if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
+                score += 50; 
+            } else if (normalizedText.includes(card.id)) {
+                score += 5; // Low points, because '60' could be HP, not an ID
             }
 
-            // Fallback: Fuzzy Word Match
-            // Split "Mega Meganium ex" into ["mega", "meganium", "ex"]
+            // 2. Check Exact Name Match
+            if (normalizedText.includes(card.name.toLowerCase())) {
+                score += 100; // Instant win if the full name is found perfectly
+            }
+
+            // 3. Check Word-by-Word (Fuzzy Match)
+            // Example: "Oddish Erika" -> checks "oddish" and "erika" separately
             const cardWords = card.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-            let score = 0;
+            let matchedWords = 0;
             
             for (let word of cardWords) {
-                if (normalizedTextFound.includes(word)) {
-                    score++;
+                if (normalizedText.includes(word)) {
+                    score += 20;
+                    matchedWords++;
                 }
             }
+            
+            // Bonus points if it found MULTIPLE words from the same name
+            if (cardWords.length > 1 && matchedWords >= Math.ceil(cardWords.length / 2)) {
+                score += 30; 
+            }
 
-            // If we found at least half of the important words in the name, consider it a match
-            if (score > 0 && score > highestScore && score >= Math.ceil(cardWords.length / 2)) {
+            // Check if this card is the new winner (Minimum 25 points to avoid random noise)
+            if (score > highestScore && score >= 25) { 
                 highestScore = score;
-                bestMatchName = card.name;
+                bestMatchCard = card;
             }
         }
 
-        // If exact match failed but fuzzy match succeeded, use fuzzy
-        if (!foundName && bestMatchName) {
-            foundName = bestMatchName;
-        }
-
-        // --- STEP 4: Apply the findings to the UI ---
-        if (foundId || foundName) {
+        // --- STEP 3: Apply the Winner to the UI ---
+        if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
+            statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
             
-            // If we found a set code and it exists in our map, change the dropdown!
-            if (foundSetCode && setCodeMap[foundSetCode]) {
-                const targetSeries = setCodeMap[foundSetCode];
-                const seriesSelect = document.getElementById('seriesSelect');
-                
-                // Only change and reload if it's different from the current series
-                if (seriesSelect.value !== targetSeries) {
-                    seriesSelect.value = targetSeries;
-                    statusMsg.innerText = `Found Set: ${targetSeries}. Loading...`;
-                    await changeSeries(); // Wait for the new set to load from the database
-                }
-            }
-
-            // Put the most accurate data into the search bar (ID is usually most accurate)
-            const searchString = foundId ? foundId : foundName;
-            document.getElementById('searchInput').value = searchString;
-            
-            statusMsg.innerText = `Match Found: ${foundName || `Card #${foundId}`}!`;
-            
-            // Trigger the visual filter
+            // We put the EXACT ID into the search box to perfectly isolate it
+            document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
 
             setTimeout(() => {
@@ -765,7 +750,7 @@ async function captureAndScan() {
             }, 2000);
 
         } else {
-            statusMsg.innerText = "Couldn't clearly read Name or ID. Try moving closer to the bottom left corner!";
+            statusMsg.innerText = "Couldn't confidently identify the card. Try tapping to focus!";
             statusMsg.style.color = "#ff6b6b";
             btn.disabled = false;
         }
