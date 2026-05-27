@@ -697,14 +697,40 @@ async function captureAndScan() {
             foundSetCode = setMatch[1].toUpperCase();
         }
 
-        // --- STEP 3: Find the Name ---
+        // --- STEP 3: Find the Name (UPGRADED FUZZY MATCH) ---
         // Cross-reference the OCR text with the currently loaded cards
+        let bestMatchName = "";
+        let highestScore = 0;
+        const normalizedTextFound = textFound.toLowerCase();
+
         for (let card of allCards) {
-            // Check if the exact card name (e.g. "Oddish Erika") exists in the scanned text
-            if (textFound.toLowerCase().includes(card.name.toLowerCase())) {
+            // Check exact match first (fastest)
+            if (normalizedTextFound.includes(card.name.toLowerCase())) {
                 foundName = card.name;
                 break;
             }
+
+            // Fallback: Fuzzy Word Match
+            // Split "Mega Meganium ex" into ["mega", "meganium", "ex"]
+            const cardWords = card.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+            let score = 0;
+            
+            for (let word of cardWords) {
+                if (normalizedTextFound.includes(word)) {
+                    score++;
+                }
+            }
+
+            // If we found at least half of the important words in the name, consider it a match
+            if (score > 0 && score > highestScore && score >= Math.ceil(cardWords.length / 2)) {
+                highestScore = score;
+                bestMatchName = card.name;
+            }
+        }
+
+        // If exact match failed but fuzzy match succeeded, use fuzzy
+        if (!foundName && bestMatchName) {
+            foundName = bestMatchName;
         }
 
         // --- STEP 4: Apply the findings to the UI ---
