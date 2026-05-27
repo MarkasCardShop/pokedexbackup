@@ -5,6 +5,7 @@
     <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
     <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         body {
             font-family: 'Nunito', sans-serif;
@@ -685,6 +686,77 @@ let setTotalMap = {};
 // Leave this empty! We will fetch it from Code.gs securely.
 let GEMINI_API_KEY = "";
 
+        // === THE HYBRID SCAN MANAGER ===
+async function hybridScan(base64Data, canvas, statusMsg, btn) {
+    statusMsg.innerText = "Running Standard Scan (Free)...";
+    statusMsg.style.color = "#fff";
+    btn.disabled = true;
+
+    try {
+        // --- 1. TESSERACT (LOCAL) PASS ---
+        // Tesseract reads the canvas directly
+        const result = await Tesseract.recognize(canvas, 'eng', {
+            logger: m => {
+                // Show a cool loading percentage while Tesseract thinks
+                if (m.status === 'recognizing text') {
+                    statusMsg.innerText = `Standard Scan: ${Math.round(m.progress * 100)}%`;
+                }
+            }
+        });
+
+        const text = result.data.text;
+        console.log("Tesseract Raw Output:", text);
+
+        // Regex: Look for anything resembling "014/193" or "26/165"
+        const fractionMatch = text.match(/(\d{1,3})\s*\/\s*\d{1,3}/);
+        let foundLocalMatch = false;
+
+        if (fractionMatch) {
+            // Extract the left side of the slash and pad it
+            let foundId = fractionMatch[1].padStart(3, '0');
+            
+            // Look for it in the CURRENTLY selected dropdown set
+            const bestMatchCard = allCards.find(c => {
+                if (!c.id) return false;
+                const dbId = String(c.id).replace(/[^a-zA-Z0-9]/g, '').trim().padStart(3, '0');
+                return dbId === foundId;
+            });
+
+            if (bestMatchCard) {
+                // TESSERACT SUCCESS! 
+                statusMsg.style.color = "#2ecc71";
+                statusMsg.innerText = `Fast Match: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
+                
+                document.getElementById('searchInput').value = bestMatchCard.id;
+                filterCards(); 
+                
+                setTimeout(() => {
+                    closeScanner();
+                    btn.innerText = "Scan Camera";
+                    btn.disabled = false;
+                }, 1500);
+                
+                foundLocalMatch = true; 
+            }
+        }
+
+        // --- 2. GEMINI AI (FALLBACK) PASS ---
+        if (!foundLocalMatch) {
+            statusMsg.innerText = "Standard scan missed. Booting AI...";
+            statusMsg.style.color = "#ffcb05";
+            
+            // We pass it directly to the flawless Gemini function we already built!
+            await processImageWithGemini(base64Data, statusMsg, btn);
+        }
+
+    } catch (error) {
+        console.error("Tesseract Error:", error);
+        // If Tesseract crashes for any reason, don't break the app, just use Gemini
+        statusMsg.innerText = "Standard scan failed. Booting AI...";
+        statusMsg.style.color = "#ffcb05";
+        await processImageWithGemini(base64Data, statusMsg, btn);
+    }
+}
 // ... existing variables and functions ...
 
 // Extract the Gemini API call logic for reuse
