@@ -668,59 +668,46 @@ const setCodeMap = {
 
 async function captureAndScan() {
     const video = document.getElementById('camera-stream');
-    const stitchedCanvas = document.getElementById('stitched-canvas');
+    const canvas = document.getElementById('snapshot-canvas');
     const statusMsg = document.getElementById('scan-status');
     const btn = document.getElementById('capture-btn');
 
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+
+    const topHeight = vh * 0.25;
+    const bottomHeight = vh * 0.20;
+    const bottomStartY = vh * 0.80; 
+
+    canvas.width = vw;
+    canvas.height = topHeight + bottomHeight;
+
+    ctx.drawImage(video, 0, 0, vw, topHeight, 0, 0, vw, topHeight);
+    ctx.drawImage(video, 0, bottomStartY, vw, bottomHeight, 0, topHeight, vw, bottomHeight);
+
+    if (typeof applyOcrFilters === "function") {
+        applyOcrFilters(canvas);
+    }
+    
     btn.disabled = true;
-    statusMsg.innerText = "Cropping zones... please wait.";
+    statusMsg.innerText = "Analyzing Target Zones... please wait.";
     statusMsg.style.color = "#ffcb05";
 
-    // --- ZONE CROPPING MATH ---
-    // The visual guide is at 10% from the edges, taking up 80% width/height.
-    const vW = video.videoWidth;
-    const vH = video.videoHeight;
-    
-    const cardX = vW * 0.10;
-    const cardY = vH * 0.10;
-    const cardW = vW * 0.80;
-    const cardH = vH * 0.80;
-
-    // Name is in the top 15% of the card area
-    const nameZoneH = cardH * 0.15;
-    
-    // Set/ID is in the bottom 12% of the card area
-    const idZoneH = cardH * 0.12;
-    const idZoneY = cardY + (cardH * 0.88);
-
-    // Prepare the new stitched canvas (gluing top and bottom together)
-    stitchedCanvas.width = cardW;
-    stitchedCanvas.height = nameZoneH + idZoneH;
-    const ctx = stitchedCanvas.getContext('2d');
-
-    // 1. Draw Name Zone
-    ctx.drawImage(video, cardX, cardY, cardW, nameZoneH, 0, 0, cardW, nameZoneH);
-    
-    // 2. Draw ID Zone immediately below the Name Zone
-    ctx.drawImage(video, cardX, idZoneY, cardW, idZoneH, 0, nameZoneH, cardW, idZoneH);
-    
-    // 3. Apply High-Contrast Filter ONLY to the stitched image
-    applyOcrFilters(stitchedCanvas); 
-
     try {
-        const imageDataUrl = stitchedCanvas.toDataURL('image/jpeg');
+        const imageDataUrl = canvas.toDataURL('image/jpeg');
         const worker = await Tesseract.createWorker('eng');
         const ret = await worker.recognize(imageDataUrl);
         const textFound = ret.data.text;
         await worker.terminate();
 
-        console.log("Cleaned Zone OCR Text:", textFound); 
+        console.log("Stitched OCR Text:", textFound); 
         const normalizedText = textFound.toLowerCase().replace(/\n/g, ' '); 
         
         let bestMatchCard = null;
         let highestScore = 0;
 
-        // --- CHECK SET CODE ---
+        // Auto-Switch Series check
         const setMatch = textFound.match(/([a-zA-Z0-9]{3})\s*[I|1|l]?\s*\d{3}/);
         if (setMatch && typeof setCodeMap !== 'undefined') {
             let foundSetCode = setMatch[1].toUpperCase();
@@ -731,12 +718,28 @@ async function captureAndScan() {
             }
         }
 
-        // --- HIERARCHY SCORING ---
+        // Global Strict ID Extraction
+        const numberMatch = textFound.match(/(\d{3})\s*[\/|\\Il]\s*\d{3}/);
+        const strictId = numberMatch ? numberMatch[1] : null;
+
         for (let card of allCards) {
             let score = 0;
+            let matchedNumber = false;
+            let hasRarity = card.rarity && card.rarity.trim() !== "";
             const exactName = card.name.toLowerCase();
-            
-            // 1. Name Matches
+
+            // 1. NUMBER (Highest Priority Identifier)
+            if (strictId === card.id) {
+                score += 2000; // Definitive match overrides everything
+                matchedNumber = true;
+            } else if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
+                score += 500; 
+                matchedNumber = true;
+            } else if (normalizedText.includes(card.id)) {
+                score += 20;  
+            }
+
+            // 2. NAME
             if (normalizedText.includes(exactName)) {
                 score += 1000; 
             } else {
@@ -753,19 +756,18 @@ async function captureAndScan() {
                 }
             }
 
-            // 2. Rarity Bonus
-            if (card.rarity) {
+            // 3. RARITY
+            if (hasRarity) {
                 const rarityRegex = new RegExp(`\\b${card.rarity.toLowerCase()}\\b`);
                 if (rarityRegex.test(normalizedText)) {
-                    score += 50;
+                    score += 100;
                 }
             }
 
-            // 3. Number Tie-Breaker
-            if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
-                score += 200; 
-            } else if (normalizedText.includes(card.id)) {
-                score += 20;  
+            // --- STRICT ENFORCEMENT ZONE ---
+            // If the card has no rarity, it MUST match the number to be considered.
+            if (!hasRarity && !matchedNumber) {
+                score -= 2500; 
             }
 
             if (score > highestScore && score >= 200) { 
@@ -774,10 +776,10 @@ async function captureAndScan() {
             }
         }
 
-        // --- UI UPDATE ---
         if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
             statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
+            
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
 
@@ -786,7 +788,7 @@ async function captureAndScan() {
             }, 2000);
 
         } else {
-            statusMsg.innerText = "Targeting failed. Align Name & ID in the red zones!";
+            statusMsg.innerText = "Target lost. Make sure the Name is in the top green box and ID in the bottom green box!";
             statusMsg.style.color = "#ff6b6b";
             btn.disabled = false;
         }
