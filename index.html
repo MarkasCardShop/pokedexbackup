@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <base target="_top">
+    <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #1a1a1d;
+            background-image: radial-gradient(#2a2a2d 2px, transparent 2px), radial-gradient(#2a2a2d 2px, transparent 2px);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* --- Logo Styles --- */
+        .header-title-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .header-title-container h1 {
+            margin-bottom: 0; 
+        }
+        .app-logo {
+            max-width: 100px;
+            margin: -10px auto 15px auto;
+            display: block;
+            background-color: #f4f4f4; 
+            padding: 10px;
+            border-radius: 15px;
+            border: 3px solid #e3350d;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .header-logo {
+            max-width: 60px;
+            background-color: #f4f4f4;
+            padding: 5px;
+            border-radius: 10px;
+            border: 3px solid #e3350d;
+            margin-right: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        h1 {
+            text-align: center; font-size: 3em; letter-spacing: 3px;
+            color: #ffcb05; -webkit-text-stroke: 2px #2a75bb; text-shadow: 5px 5px 0px #2a75bb; text-transform: uppercase;
+        }
+        
+        .auth-screen {
+            max-width: 400px; margin: 40px auto; background-color: #222; padding: 30px;
+            border-radius: 15px; border: 4px solid #e3350d; border-top: 20px solid #e3350d;
+            text-align: center; box-shadow: 0 10px 0px #111;
+        }
+        .auth-screen h2 { margin-top: -5px; color: #fff; letter-spacing: 1px; }
+        .auth-screen input, .modal input {
+            width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 3px solid #444;
+            background-color: #111; color: white; font-size: 1.2em; font-family: 'Nunito', sans-serif;
+            font-weight: bold; box-sizing: border-box; text-align: center;
+        }
+        .auth-screen input:focus, .modal input:focus { border-color: #ffcb05; outline: none; }
+
+        button.main-btn {
+            background-color: #ffcb05; color: #2a75bb; border: 3px solid #2a75bb; padding: 12px 20px;
+            font-size: 1.2em; font-family: 'Nunito', sans-serif; font-weight: 900; border-radius: 8px;
+            cursor: pointer; width: 90%; margin-top: 15px; text-transform: uppercase;
+            box-shadow: 0 6px 0 #2a75bb; transition: all 0.1s;
+        }
+        button.main-btn:active { transform: translateY(6px); box-shadow: none; }
+        button.main-btn:disabled { background-color: #555; color: #888; border-color: #333; box-shadow: 0 6px 0 #333; }
+        .auth-screen button.switch-btn { background: none; border: none; color: #ffcb05; margin-top: 25px; cursor: pointer; font-weight: bold; font-size: 0.9em; }
+        .auth-error { color: #ff6b6b; margin-top: 10px; display: none; font-weight: bold; background: rgba(255,0,0,0.1); padding: 5px; border-radius: 5px;}
+        .auth-success { color: #2ecc71; margin-top: 10px; display: none; font-weight: bold; background: rgba(46,204,113,0.1); padding: 5px; border-radius: 5px;}
+        .auth-note { font-size: 0.8em; color: #888; margin-top: 15px; }
+
+        #register-screen, #app-screen { display: none; }
+
+        /* --- STICKY Controls Area --- */
+        .controls-container {
+            position: sticky; top: 10px; z-index: 900; max-width: 1200px; margin: 0 auto 30px auto;
+            background-color: #222; padding: 20px; border-radius: 12px; border: 4px solid #e3350d;
+            border-top: 15px solid #e3350d; display: flex; flex-wrap: wrap; gap: 15px;
+            align-items: center; justify-content: space-between; box-shadow: 0 8px 15px rgba(0,0,0,0.8);
+        }
+        select, .search-box {
+            padding: 12px; border-radius: 8px; border: 3px solid #444; background-color: #111;
+            color: white; font-size: 1em; font-family: 'Nunito', sans-serif; font-weight: bold; flex: 1; min-width: 200px;
+        }
+        select:focus, .search-box:focus { border-color: #ffcb05; outline: none; }
+        
+        .progress-wrapper { flex: 2; min-width: 250px; text-align: center; }
+        .progress-text { font-size: 1.1em; margin-bottom: 8px; font-weight: 900; color: #fff; text-transform: uppercase;}
+        .progress-bar-container { width: 100%; background-color: #111; border: 3px solid #444; border-radius: 20px; overflow: hidden; height: 24px; box-shadow: inset 0 3px 5px rgba(0,0,0,0.5); }
+        .progress-bar-fill { height: 100%; background: linear-gradient(180deg, #60e685 0%, #45d96a 100%); width: 0%; transition: width 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); border-right: 2px solid #2eb34d; }
+        
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 25px; max-width: 1200px; margin: 0 auto; padding-bottom: 50px;}
+        .card-item { background-color: #2a2a2a; border: 4px solid #444; border-radius: 12px; padding: 15px; text-align: center; transition: all 0.2s; box-shadow: 0 6px 0px #111; position: relative;}
+        .card-item:hover { transform: translateY(-4px); border-color: #ffcb05; }
+        .card-item.owned { border-color: #ffcb05; background: linear-gradient(145deg, #333 0%, #2a2a2a 100%); box-shadow: 0 0 15px rgba(255, 203, 5, 0.2), 0 6px 0px #111; }
+        .card-image { width: 100%; height: 250px; object-fit: contain; background-color: #111; border-radius: 8px; margin-bottom: 15px; border: 2px solid #111; }
+        .card-number { font-size: 1.1em; color: #888; margin-bottom: 5px; font-weight: 900;}
+        .card-title { font-size: 1.2em; font-weight: 900; margin-bottom: 12px; min-height: 2.4em; color: #fff;}
+        
+        .rarity-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.9em; font-weight: 900; margin-bottom: 15px; background-color: #111; border: 2px solid #333; color: #fff; }
+        .rarity-C { color: #b2bec3; border-color: #b2bec3;} .rarity-U { color: #74b9ff; border-color: #74b9ff;} .rarity-R { color: #a29bfe; border-color: #a29bfe;}
+        .rarity-RR { color: #fdcb6e; border-color: #fdcb6e; text-shadow: 0 0 5px rgba(253,203,110,0.5); } .rarity-AR { color: #00cec9; border-color: #00cec9; text-shadow: 0 0 5px rgba(0,206,201,0.5); }
+        .rarity-SR { color: #e84393; border-color: #e84393; text-shadow: 0 0 5px rgba(232,67,147,0.5); } .rarity-SAR { background: linear-gradient(45deg, #ff9a9e, #fecfef); color: #000; border-color: #fff;} .rarity-MUR { background: linear-gradient(45deg, #f6d365, #fda085); color: #000; box-shadow: 0 0 10px #fda085; border-color: #fff;}
+
+        .checkbox-container { display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-weight: bold; font-size: 1.1em;}
+        .checkbox-container input { width: 22px; height: 22px; cursor: pointer; accent-color: #e3350d;}
+        #status-msg { text-align: center; font-size: 1.4em; font-weight: 900; color: #ffcb05; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .top-btn-container { text-align: right; margin-bottom: 10px; }
+        .app-btn { background-color: #444; border: 3px solid #222; box-shadow: 0 4px 0px #111; padding: 8px 15px; border-radius: 8px; color: white; cursor: pointer; font-weight: 900; text-transform: uppercase; margin-left: 10px;}
+        .app-btn:active { transform: translateY(4px); box-shadow: none; }
+        .btn-settings { background-color: #2a75bb; }
+
+        /* --- Modal Styles --- */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+        .modal-content { background-color: #222; margin: 10% auto; padding: 30px; border: 4px solid #2a75bb; width: 90%; max-width: 400px; border-radius: 15px; box-shadow: 0 10px 30px #000; text-align: center; position: relative;}
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; position: absolute; right: 20px; top: 10px;}
+        .close:hover, .close:focus { color: #fff; text-decoration: none; cursor: pointer; }
+        .admin-zone { border-top: 3px dashed #444; margin-top: 25px; padding-top: 15px; display: none; }
+        .modal h3 { color: #ffcb05; }
+        .admin-zone h3 { color: #e3350d; }
+
+        @media (max-width: 600px) {
+            body { padding: 10px; } 
+            h1 { font-size: 1.8em; }
+            .header-logo { max-width: 40px; border-width: 2px; margin-right: 10px; padding: 3px;}
+            .controls-container { top: 0; padding: 10px; gap: 8px; border-radius: 0 0 12px 12px; margin-bottom: 15px; }
+            select, .search-box { padding: 8px; min-width: 45%; font-size: 0.85em; }
+            .progress-text { font-size: 0.9em; margin-bottom: 5px; } .progress-bar-container { height: 16px; }
+            .card-grid { grid-template-columns: repeat(4, 1fr); gap: 5px; padding-bottom: 20px; }
+            .card-item { padding: 5px; border-width: 2px; border-radius: 6px; box-shadow: 0 3px 0px #111; }
+            .card-image { height: 60px; margin-bottom: 5px; border-width: 1px; border-radius: 4px; }
+            .card-number { font-size: 0.6em; margin-bottom: 2px; }
+            .card-title { font-size: 0.65em; margin-bottom: 5px; min-height: 2.8em; line-height: 1.1; word-wrap: break-word; }
+            .rarity-badge { font-size: 0.55em; padding: 2px 4px; margin-bottom: 5px; }
+            .checkbox-container { font-size: 0.6em; gap: 2px; flex-direction: column; } .checkbox-container input { width: 16px; height: 16px; }
+        }
+        
+        /* Image Preview Modal */
+        #imageModal .modal-content {
+            background-color: transparent;
+            border: none;
+            box-shadow: none;
+            max-width: 90vw;
+            margin: 5% auto;
+            padding: 0;
+        }
+
+        #fullsize-image {
+            width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+            border-radius: 15px;
+            border: 5px solid #ffcb05; /* Pokemon Yellow Border */
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+
+        .card-image {
+            cursor: zoom-in; /* Shows the user it's clickable */
+            transition: transform 0.2s;
+        }
+
+        .card-image:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="auth-screen">
+        <img src="https://i.ibb.co.com/MkT3WgLx/Markas.png" class="app-logo" alt="Markas Logo">
+        <h2>TRAINER LOGIN</h2>
+        <input type="text" id="log-username" placeholder="Username">
+        <input type="password" id="log-pin" placeholder="4-Digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+        <button onclick="attemptLogin()" id="login-btn" class="main-btn">Access Pokedex</button>
+        <div id="login-error" class="auth-error"></div>
+        <button onclick="toggleAuthScreens()" class="switch-btn">New Trainer? Register Here</button>
+    </div>
+
+    <div id="register-screen" class="auth-screen">
+        <img src="https://i.ibb.co.com/MkT3WgLx/Markas.png" class="app-logo" alt="Markas Logo">
+        <h2>REGISTER TRAINER</h2>
+        <input type="text" id="reg-username" placeholder="Choose Username">
+        <input type="tel" id="reg-mobile" placeholder="Mobile Number">
+        <input type="password" id="reg-pin" placeholder="4-Digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+        <input type="password" id="reg-confirm" placeholder="Confirm 4-Digit PIN" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+        <input type="text" id="reg-referral" placeholder="Referral Code">
+        
+        <button onclick="attemptRegister()" id="reg-btn" class="main-btn">Create Save File</button>
+        <div id="reg-error" class="auth-error"></div>
+        <div class="auth-note">Saving your progress data will take 5-10 seconds.</div>
+        <button onclick="toggleAuthScreens()" class="switch-btn">Already registered? Login Here</button>
+    </div>
+
+    <div id="app-screen">
+        <div class="top-btn-container">
+            <button class="app-btn btn-settings" onclick="openSettings()">⚙️ Settings</button>
+            <button class="app-btn" onclick="logout()">Save & Quit</button>
+        </div>
+        
+        <div class="header-title-container">
+            <img src="https://i.ibb.co.com/MkT3WgLx/Markas.png" class="header-logo" alt="Markas Logo">
+            <h1>Markas Pokédex</h1>
+        </div>
+        
+        <div class="controls-container">
+            <select id="seriesSelect" onchange="changeSeries()"><option value="">Loading Series...</option></select>
+            <input type="text" class="search-box" id="searchInput" placeholder="Search Pokémon..." onkeyup="filterCards()">
+            <div class="progress-wrapper">
+                <div class="progress-text" id="progressText">0 / 0 Registered (0%)</div>
+                <div class="progress-bar-container"><div class="progress-bar-fill" id="progressBar"></div></div>
+            </div>
+        </div>
+
+        <div id="status-msg">Loading Pokedex Data...</div>
+        <div class="card-grid" id="cardGrid"></div>
+    </div>
+
+    <div id="settingsModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeSettings()">&times;</span>
+        
+        <h3>USER SETTINGS</h3>
+        <p style="font-size:0.9em; color:#aaa; margin-top:-10px;">Logged in as: <span id="display-user" style="color:#fff;"></span></p>
+        <input type="password" id="new-my-pin" placeholder="New 4-Digit PIN" maxlength="4" inputmode="numeric">
+        <button class="main-btn" onclick="updateMyPin()">Update My PIN</button>
+        <div id="set-user-msg"></div>
+
+        <div id="admin-panel" class="admin-zone">
+            <h3>ADMIN CONTROLS</h3>
+            
+            <input type="text" id="new-ref-code" placeholder="New Referral Code">
+            <button class="main-btn" style="background-color:#e3350d; color:#fff;" onclick="updateReferral()">Change Referral Code</button>
+            
+            <hr style="border: 1px solid #333; margin: 20px 0;">
+            
+            <input type="text" id="target-username" placeholder="Target Username">
+            <input type="password" id="target-new-pin" placeholder="Force New 4-Digit PIN" maxlength="4" inputmode="numeric">
+            <button class="main-btn" style="background-color:#e3350d; color:#fff;" onclick="forcePinReset()">Force Reset PIN</button>
+            
+            <div id="set-admin-msg"></div>
+        </div>
+      </div>
+    </div> 
+
+    <div id="imageModal" class="modal" onclick="closeImageModal()">
+        <div class="modal-content">
+            <span class="close" onclick="closeImageModal()">&times;</span>
+            <img id="fullsize-image" src="" alt="Card Preview">
+        </div>
+    </div>
+
+    <script>
+        // Paste your brand new Google Apps Script Web App URL here
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwMUirA7Lp08A7FK_0c0O8tt7nSEueRYHST8dmpJfEmM1UU33sRMn7Ncn5AJ6zd1FRu/exec';
+
+        // This replaces google.script.run
+        async function apiCall(action, payload = {}) {
+            payload.action = action; 
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    redirect: 'follow', // Required for Google's security redirects
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8', // Bypasses strict CORS rules
+                    },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error("API Connection Failed:", error);
+                return { success: false, error: "Network error. Please try again." };
+            }
+        }
+        
+        let allCards = [];
+        let currentSeries = "";
+        let userSheetId = sessionStorage.getItem("userSheetId") || null;
+        let currentUserRole = sessionStorage.getItem("userRole") || "user";
+        let currentUsername = sessionStorage.getItem("username") || "";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (userSheetId) showAppScreen();
+
+            // --- NEW: Trigger login when pressing Enter ---
+            const triggerLoginOnEnter = (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault(); // Prevents unexpected form behavior
+                    attemptLogin();
+                }
+            };
+
+            // Listen for Enter on both the username and PIN fields
+            document.getElementById('log-username').addEventListener('keypress', triggerLoginOnEnter);
+            document.getElementById('log-pin').addEventListener('keypress', triggerLoginOnEnter);
+        });
+
+        function toggleAuthScreens() {
+            document.getElementById('login-screen').style.display = document.getElementById('login-screen').style.display === 'none' ? 'block' : 'none';
+            document.getElementById('register-screen').style.display = document.getElementById('login-screen').style.display === 'none' ? 'block' : 'none';
+            document.getElementById('login-error').style.display = 'none';
+            document.getElementById('reg-error').style.display = 'none';
+        }
+
+        function isPinValid(pin) { return /^\d{4}$/.test(pin); }
+
+        async function attemptLogin() {
+            const user = document.getElementById('log-username').value.trim();
+            const pin = document.getElementById('log-pin').value.trim();
+            const btn = document.getElementById('login-btn');
+            const err = document.getElementById('login-error');
+
+            if(!user || !pin) { err.innerText = "Enter both username and PIN."; err.style.display = "block"; return; }
+
+            btn.innerText = "Connecting..."; btn.disabled = true; err.style.display = "none";
+
+            const res = await apiCall('login', { username: user, pin: pin });
+            
+            if (res.success) {
+                userSheetId = res.sheetId; currentUserRole = res.role; currentUsername = res.username;
+                sessionStorage.setItem("userSheetId", userSheetId);
+                sessionStorage.setItem("userRole", currentUserRole);
+                sessionStorage.setItem("username", currentUsername);
+                showAppScreen();
+            } else {
+                err.innerText = res.error; err.style.display = "block";
+                btn.innerText = "Access Pokedex"; btn.disabled = false;
+            }
+        }
+
+        async function attemptRegister() {
+            const user = document.getElementById('reg-username').value.trim();
+            const mobile = document.getElementById('reg-mobile').value.trim();
+            const pin = document.getElementById('reg-pin').value;
+            const confirm = document.getElementById('reg-confirm').value;
+            const referral = document.getElementById('reg-referral').value.trim();
+            const btn = document.getElementById('reg-btn');
+            const err = document.getElementById('reg-error');
+
+            if(!user || !mobile || !pin || !confirm || !referral) { err.innerText = "Fill out all fields."; err.style.display = "block"; return; }
+            if(!isPinValid(pin)) { err.innerText = "PIN must be exactly 4 digits."; err.style.display = "block"; return; }
+            if(pin !== confirm) { err.innerText = "PINs do not match."; err.style.display = "block"; return; }
+
+            btn.innerText = "Creating Save File..."; btn.disabled = true; err.style.display = "none";
+
+            const res = await apiCall('register', { 
+                username: user, 
+                pin: pin, 
+                mobile: mobile, 
+                referral: referral 
+            });
+            
+            if(res.success) {
+                userSheetId = res.sheetId; currentUserRole = res.role; currentUsername = res.username;
+                sessionStorage.setItem("userSheetId", userSheetId);
+                sessionStorage.setItem("userRole", currentUserRole);
+                sessionStorage.setItem("username", currentUsername);
+                showAppScreen();
+            } else {
+                err.innerText = res.error; err.style.display = "block";
+                btn.innerText = "Create Save File"; btn.disabled = false;
+            }
+        }
+
+        function logout() {
+    sessionStorage.clear(); userSheetId = null; currentUserRole = "user"; currentUsername = "";
+    document.getElementById('app-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'block';
+    document.getElementById('register-screen').style.display = 'none';
+    
+    // --- NEW: Lock zoom again for the login screen ---
+    document.getElementById('viewport-meta').setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+    
+    document.querySelectorAll('input').forEach(input => input.value = '');
+    document.getElementById('login-btn').innerText = 'Access Pokedex'; document.getElementById('login-btn').disabled = false;
+    document.getElementById('reg-btn').innerText = 'Create Save File'; document.getElementById('reg-btn').disabled = false;
+}
+
+        function showAppScreen() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('register-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    
+    // --- NEW: Unlock zoom for the main app ---
+    document.getElementById('viewport-meta').setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+    
+    document.getElementById('display-user').innerText = currentUsername;
+    if(currentUserRole === 'admin') {
+        document.getElementById('admin-panel').style.display = 'block';
+    } else {
+        document.getElementById('admin-panel').style.display = 'none';
+    }
+    
+    initializeApp();
+    }
+
+        function openSettings() { document.getElementById('settingsModal').style.display = "block"; }
+        
+        function closeSettings() { 
+            document.getElementById('settingsModal').style.display = "none"; 
+            document.getElementById('set-user-msg').style.display = "none";
+            document.getElementById('set-admin-msg').style.display = "none";
+        }
+        
+        function showMsg(elementId, text, isSuccess) {
+            const el = document.getElementById(elementId);
+            el.innerText = text;
+            el.className = isSuccess ? 'auth-success' : 'auth-error';
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 4000);
+        }
+
+        async function updateMyPin() {
+            const pin = document.getElementById('new-my-pin').value;
+            if(!isPinValid(pin)) return showMsg('set-user-msg', 'PIN must be 4 digits.', false);
+            
+            const res = await apiCall('changePin', { 
+                username: currentUsername, 
+                newPin: pin 
+            });
+            
+            if(res.success) { 
+                showMsg('set-user-msg', 'PIN updated successfully!', true); 
+                document.getElementById('new-my-pin').value = ''; 
+            } else {
+                showMsg('set-user-msg', res.error, false);
+            }
+        }
+
+        async function updateReferral() {
+            const code = document.getElementById('new-ref-code').value.trim();
+            if(!code) return showMsg('set-admin-msg', 'Code cannot be empty.', false);
+            
+            const res = await apiCall('updateReferral', { newCode: code });
+            
+            if(res.success) { 
+                showMsg('set-admin-msg', 'Referral code updated!', true); 
+                document.getElementById('new-ref-code').value = '';
+            } else {
+                showMsg('set-admin-msg', res.error || 'Update failed', false);
+            }
+        }
+
+        async function forcePinReset() {
+            const user = document.getElementById('target-username').value.trim();
+            const pin = document.getElementById('target-new-pin').value;
+            if(!user || !isPinValid(pin)) return showMsg('set-admin-msg', 'Enter user and 4-digit PIN.', false);
+            
+            const res = await apiCall('changePin', { username: user, newPin: pin });
+            
+            if(res.success) { 
+                showMsg('set-admin-msg', `PIN reset for ${user}!`, true); 
+                document.getElementById('target-username').value = ''; 
+                document.getElementById('target-new-pin').value = ''; 
+            } else {
+                showMsg('set-admin-msg', res.error, false);
+            }
+        }
+
+        async function initializeApp() {
+            const res = await apiCall('getSeries', { userSheetId: userSheetId });
+            if (res.success) {
+                populateSeriesDropdown(res.seriesList);
+            } else {
+                showError(res.error);
+            }
+        }
+
+        function populateSeriesDropdown(seriesList) {
+            const select = document.getElementById('seriesSelect'); select.innerHTML = ''; 
+            seriesList.forEach(s => { const opt = document.createElement('option'); opt.value = s; opt.text = s; select.appendChild(opt); });
+            if(seriesList.length > 0) { currentSeries = seriesList[seriesList.length - 1]; select.value = currentSeries; loadCardsForSeries(); }
+        }
+
+        function changeSeries() { currentSeries = document.getElementById('seriesSelect').value; loadCardsForSeries(); }
+
+        async function loadCardsForSeries() {
+            document.getElementById('status-msg').innerText = `Syncing ${currentSeries} Data...`;
+            document.getElementById('status-msg').style.display = 'block'; 
+            document.getElementById('cardGrid').innerHTML = '';
+            
+            const res = await apiCall('getCards', { 
+                seriesName: currentSeries, 
+                userSheetId: userSheetId 
+            });
+
+            if (res.success) {
+                allCards = res.cards; 
+                filterCards();
+            } else {
+                showError(res.error);
+            }
+        }
+
+        function filterCards() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            renderCards(allCards.filter(c => c.name.toLowerCase().includes(term) || c.id.includes(term)));
+            updateProgress();
+        }
+
+        function renderCards(cardsToRender) {
+            const grid = document.getElementById('cardGrid'); 
+            document.getElementById('status-msg').style.display = 'none'; 
+            grid.innerHTML = '';
+            
+            cardsToRender.forEach(card => {
+                const div = document.createElement('div'); 
+                div.className = `card-item ${card.owned ? 'owned' : ''}`; 
+                div.id = `card-${card.id}`;
+                
+                const img = card.imageUrl ? card.imageUrl : 'https://via.placeholder.com/200x280.png?text=???';
+                
+                div.innerHTML = `
+                    <img src="${img}" class="card-image" loading="lazy" onclick="openImageModal('${img}')">
+                    <div class="card-number">#${card.id}</div>
+                    <div class="card-title">${card.name}</div>
+                    <div class="rarity-badge rarity-${card.rarity}">${card.rarity}</div>
+                    <label class="checkbox-container">
+                        <input type="checkbox" onchange="toggleOwned('${card.id}', this.checked)" ${card.owned ? 'checked' : ''}>CAUGHT
+                    </label>`;
+                    
+                grid.appendChild(div);
+            });
+        }
+
+        async function toggleOwned(id, isOwned) {
+            const el = document.getElementById(`card-${id}`);
+            isOwned ? el.classList.add('owned') : el.classList.remove('owned');
+            const idx = allCards.findIndex(c => c.id === id); 
+            
+            if(idx > -1) { 
+                allCards[idx].owned = isOwned; 
+                updateProgress(); 
+            }
+            
+            // Send to database
+            const res = await apiCall('updateOwned', {
+                id: id,
+                isOwned: isOwned,
+                seriesName: currentSeries,
+                userSheetId: userSheetId
+            });
+
+            // If the database fails to save, revert the checkbox and visual state back
+            if (!res.success) {
+                alert('Data Sync Failed!'); 
+                document.querySelector(`#card-${id} input`).checked = !isOwned;
+                isOwned ? el.classList.remove('owned') : el.classList.add('owned');
+                
+                if(idx > -1) { 
+                    allCards[idx].owned = !isOwned; 
+                    updateProgress(); 
+                }
+            }
+        }
+
+        function updateProgress() {
+            const total = allCards.length; const collected = allCards.filter(c => c.owned).length;
+            const pct = total === 0 ? 0 : Math.round((collected / total) * 100);
+            document.getElementById('progressText').innerText = `${collected} / ${total} Registered (${pct}%)`;
+            document.getElementById('progressBar').style.width = `${pct}%`;
+        }
+
+        function showError(error) { 
+            document.getElementById('status-msg').innerText = 'Pokedex Error. Please restart.'; 
+            document.getElementById('status-msg').style.display = 'block'; 
+            console.error(error); 
+        }
+        
+        function openImageModal(url) {
+            const modal = document.getElementById('imageModal');
+            const fullImg = document.getElementById('fullsize-image');
+            fullImg.src = url;
+            modal.style.display = "block";
+            
+            // Prevent scrolling on the background while looking at the image
+            document.body.style.overflow = "hidden"; 
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+    </script>
+</body>
+</html>
