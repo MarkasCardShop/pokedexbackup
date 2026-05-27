@@ -834,7 +834,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
             }, 1500);
 
         } else {
-            statusMsg.innerText = `AI read: ${aiData.name || 'Unknown'} (#${aiData.id || '?'}), but couldn't find it in this set.`;
+            statusMsg.innerText = `AI read: ${readName} (#${readId}${readTotal}) [Set: ${readSet}], but couldn't find it in this set.`;
             statusMsg.style.color = "#ff6b6b";
             btn.innerText = "Try Again";
             btn.disabled = false;
