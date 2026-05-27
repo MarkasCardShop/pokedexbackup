@@ -710,10 +710,18 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         // --- 1. UPDATED AI INSTRUCTIONS ---
+       // --- UPDATED UNRESTRICTED AI INSTRUCTIONS ---
         const payload = {
             "contents": [{
                 "parts": [
-                    {"text": "You are a Pokemon card expert. Look at this card and output strictly a JSON object with 4 keys: 'name' (the Pokemon's name), 'id' (the card number on the LEFT of the slash, e.g., '126'), 'set_total' (the number on the RIGHT of the slash, e.g., '193'), and 'set' (the 3-character set code, e.g., 'MA3'). Do not include markdown or conversational text. Just the JSON."},
+                    {
+                        "text": "You are a Pokemon card expert. Look at this card and output strictly a JSON object with 4 keys:\n" +
+                                "- 'name': the Pokemon's name\n" +
+                                "- 'id': the card number on the LEFT of the slash (e.g., '126')\n" +
+                                "- 'set_total': the total number on the RIGHT of the slash (e.g., '193')\n" +
+                                "- 'set': the set code symbol printed on the bottom corner (e.g., 'MA3', 'sv11S', 'SV1a'). Extract it exactly as printed.\n\n" +
+                                "Do not include markdown or conversational text. Just the raw JSON object."
+                    },
                     {
                         "inline_data": {
                             "mime_type": "image/jpeg",
@@ -741,7 +749,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         const aiData = JSON.parse(aiText);
         
         // --- 2. AUTO-SWITCH DATA SOURCES WITH STRICT PRIORITY ---
-        let validSetFound = false;
+        let validSetFound = false; // This is the correctly declared variable!
 
         // Attempt A: STRICTLY prioritize the 3-letter Set Code (e.g., 'MA3')
         if (aiData.set && typeof setCodeMap !== 'undefined') {
@@ -749,7 +757,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
             
             // Check if this code actually exists in your database map
             if (setCodeMap[foundSetCode]) {
-                validSetFound = true; // SUCCESS! We have a valid code. Lock out the fallback.
+                validSetFound = true; // Success! Lock out the fallback.
                 
                 // Only change the dropdown if we aren't already on this set
                 if (document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
@@ -761,7 +769,6 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         }
 
         // Attempt B: ONLY search the /xxx if Attempt A completely failed 
-        // (i.e., the AI couldn't read the code, or it hallucinated a fake code)
         if (!validSetFound && aiData.set_total && typeof setTotalMap !== 'undefined') {
             const foundTotal = String(aiData.set_total).padStart(3, '0'); 
             
@@ -775,6 +782,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
                     await changeSeries();
                 }
             }
+        // --------------------------------------------------------
         // Attempt B (YOUR FIX): Fallback Validation using /xxx!
         // If the AI couldn't read the set code because of AR artwork, guess the set using the denominator.
         if (!switchedSet && aiData.set_total && typeof setTotalMap !== 'undefined') {
