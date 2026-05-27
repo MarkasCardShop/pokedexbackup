@@ -4,6 +4,7 @@
     <base target="_top">
     <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
     <style>
         body {
@@ -206,7 +207,26 @@
             <button class="app-btn btn-settings" onclick="openSettings()">⚙️ Settings</button>
             <button class="app-btn" onclick="logout()">Save & Quit</button>
         </div>
+        <div class="top-btn-container">
+    <button class="app-btn" onclick="openScanner()" style="background-color: #e3350d;">📷 Scan Card</button>
+    <button class="app-btn btn-settings" onclick="openSettings()">⚙️ Settings</button>
+    <button class="app-btn" onclick="logout()">Save & Quit</button>
+</div>
+
+<div id="scannerModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close" onclick="closeScanner()">&times;</span>
+        <h3 style="color: #ffcb05;">POKÉDEX SCANNER</h3>
         
+        <video id="camera-stream" autoplay playsinline style="width: 100%; border: 3px solid #444; border-radius: 8px; background: #000;"></video>
+        
+        <canvas id="snapshot-canvas" style="display: none;"></canvas>
+        
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff;">Aim at the card's name and tap scan!</div>
+        
+        <button class="main-btn" id="capture-btn" onclick="captureAndScan()">Scan Text</button>
+    </div>
+</div>
         <div class="header-title-container">
             <img src="https://i.ibb.co.com/MkT3WgLx/Markas.png" class="header-logo" alt="Markas Logo">
             <h1>Markas Pokédex</h1>
@@ -591,6 +611,146 @@
             document.getElementById('imageModal').style.display = "none";
             document.body.style.overflow = "auto";
         }
+        // --- CAMERA & OCR SCANNER LOGIC ---
+
+let videoStream = null;
+
+async function openScanner() {
+    const modal = document.getElementById('scannerModal');
+    const video = document.getElementById('camera-stream');
+    const statusMsg = document.getElementById('scan-status');
+    
+    modal.style.display = "block";
+    statusMsg.innerText = "Starting camera...";
+    statusMsg.style.color = "#fff";
+    document.getElementById('capture-btn').disabled = false;
+
+    try {
+        // Request access to the back camera (environment facing)
+        videoStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+        });
+        video.srcObject = videoStream;
+        statusMsg.innerText = "Aim at the card's name and tap scan!";
+    } catch (err) {
+        console.error("Camera access denied:", err);
+        statusMsg.innerText = "Error: Camera access denied or not available.";
+        statusMsg.style.color = "#ff6b6b";
+    }
+}
+
+function closeScanner() {
+    document.getElementById('scannerModal').style.display = "none";
+    // Turn off the camera to save battery
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+    }
+}
+
+// Add this mapping at the top of your script area so the app knows what code equals what series
+const setCodeMap = {
+    "MA4": "Ledakan Peniada",
+    // You can add future sets here, e.g., "SV5": "Masa Depan",
+};
+
+async function captureAndScan() {
+    const video = document.getElementById('camera-stream');
+    const canvas = document.getElementById('snapshot-canvas');
+    const statusMsg = document.getElementById('scan-status');
+    const btn = document.getElementById('capture-btn');
+
+    // 1. Take the picture
+    const context = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    btn.disabled = true;
+    statusMsg.innerText = "Analyzing card data... please wait.";
+    statusMsg.style.color = "#ffcb05";
+
+    try {
+        const imageDataUrl = canvas.toDataURL('image/jpeg');
+        const worker = await Tesseract.createWorker('eng');
+        const ret = await worker.recognize(imageDataUrl);
+        const textFound = ret.data.text;
+        await worker.terminate();
+
+        console.log("Raw OCR Text:", textFound); // Helpful for seeing what the camera actually read
+
+        let foundId = "";
+        let foundName = "";
+        let foundSetCode = "";
+
+        // --- STEP 1: Find the Card Number (ID) ---
+        // Looks for the pattern "001/123" and extracts the "001"
+        const numberMatch = textFound.match(/(\d{3})\s*\/\s*\d{3}/);
+        if (numberMatch) {
+            foundId = numberMatch[1];
+        }
+
+        // --- STEP 2: Find the Set Code ---
+        // Looks for 3 alphanumeric characters (like MA4) roughly near the card number
+        // Tesseract might read the border lines as "I" or "|", so we account for that
+        const setMatch = textFound.match(/([A-Za-z0-9]{3})\s*[I|1|l]?\s*\d{3}\s*\//);
+        if (setMatch) {
+            foundSetCode = setMatch[1].toUpperCase();
+        }
+
+        // --- STEP 3: Find the Name ---
+        // Cross-reference the OCR text with the currently loaded cards
+        for (let card of allCards) {
+            // Check if the exact card name (e.g. "Oddish Erika") exists in the scanned text
+            if (textFound.toLowerCase().includes(card.name.toLowerCase())) {
+                foundName = card.name;
+                break;
+            }
+        }
+
+        // --- STEP 4: Apply the findings to the UI ---
+        if (foundId || foundName) {
+            statusMsg.style.color = "#2ecc71";
+            
+            // If we found a set code and it exists in our map, change the dropdown!
+            if (foundSetCode && setCodeMap[foundSetCode]) {
+                const targetSeries = setCodeMap[foundSetCode];
+                const seriesSelect = document.getElementById('seriesSelect');
+                
+                // Only change and reload if it's different from the current series
+                if (seriesSelect.value !== targetSeries) {
+                    seriesSelect.value = targetSeries;
+                    statusMsg.innerText = `Found Set: ${targetSeries}. Loading...`;
+                    await changeSeries(); // Wait for the new set to load from the database
+                }
+            }
+
+            // Put the most accurate data into the search bar (ID is usually most accurate)
+            const searchString = foundId ? foundId : foundName;
+            document.getElementById('searchInput').value = searchString;
+            
+            statusMsg.innerText = `Match Found: ${foundName || `Card #${foundId}`}!`;
+            
+            // Trigger the visual filter
+            filterCards(); 
+
+            setTimeout(() => {
+                closeScanner();
+            }, 2000);
+
+        } else {
+            statusMsg.innerText = "Couldn't clearly read Name or ID. Try moving closer to the bottom left corner!";
+            statusMsg.style.color = "#ff6b6b";
+            btn.disabled = false;
+        }
+
+    } catch (error) {
+        console.error("OCR Error:", error);
+        statusMsg.innerText = "Image processing failed.";
+        statusMsg.style.color = "#ff6b6b";
+        btn.disabled = false;
+    }
+}
     </script>
 </body>
 </html>
