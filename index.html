@@ -775,8 +775,6 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
                     await changeSeries();
                 }
             }
-        }
-
         // Attempt B (YOUR FIX): Fallback Validation using /xxx!
         // If the AI couldn't read the set code because of AR artwork, guess the set using the denominator.
         if (!switchedSet && aiData.set_total && typeof setTotalMap !== 'undefined') {
