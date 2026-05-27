@@ -313,6 +313,7 @@
         let currentUsername = sessionStorage.getItem("username") || "";
 
         document.addEventListener('DOMContentLoaded', () => {
+            loadSetDataFromSheet();
             if (userSheetId) showAppScreen();
 
             // --- NEW: Trigger login when pressing Enter ---
@@ -678,19 +679,9 @@ function closeScanner() {
 }
 
 // Add this mapping at the top of your script area so the app knows what code equals what series
-const setCodeMap = {
-    "SV7S": "Bimbingan Rasi",
-    "SV8S": "Kilat Rasi",
-    "SV8A": "Festival Terastal",
-    "SV9S": "Ikatan Takdir",
-    "SV10S": "Kehadiran Juara",
-    "SV11S": "Hitam Putih",
-    "MA1": "Evolusi Mega",
-    "MA2": "Kobaran Biru",
-    "MA3": "Mega Impian EX",
-    "MA4": "Ledakan Peniada",
-    // You can add future sets here, e.g., "SV5": "Masa Depan",
-};
+// These will be automatically filled from your Google Sheet!
+let setCodeMap = {};
+let setTotalMap = {};
 // Leave this empty! We will fetch it from Code.gs securely.
 let GEMINI_API_KEY = "";
 
@@ -892,6 +883,22 @@ function applyOcrFilters(canvas) {
     }
     
     ctx.putImageData(imageData, 0, 0);
+}
+        async function loadSetDataFromSheet() {
+    try {
+        console.log("Downloading Set Data from Google Sheets...");
+        const response = await apiCall('getSetData', {});
+        
+        if (response.success) {
+            setCodeMap = response.setCodeMap;
+            setTotalMap = response.setTotalMap;
+            console.log("Successfully loaded Set Data!");
+        } else {
+            console.error("Failed to load sets from sheet:", response.error);
+        }
+    } catch (error) {
+        console.error("Network error loading sets:", error);
+    }
 }
     </script>
 </body>
