@@ -210,17 +210,18 @@
 </div>
 
 <div id="scannerModal" class="modal">
-    <div class="modal-content" style="max-width: 500px;">
-        <span class="close" onclick="closeScanner()">&times;</span>
-        <h3 style="color: #ffcb05;">POKÉDEX SCANNER</h3>
+    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; max-height: 90vh; display: flex; flex-direction: column; align-items: center;">
+        <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px;">&times;</span>
+        <h3 style="color: #ffcb05; margin-top: 0;">POKÉDEX SCANNER</h3>
         
-        <video id="camera-stream" autoplay playsinline style="width: 100%; border: 3px solid #444; border-radius: 8px; background: #000;"></video>
+        <!-- Adjusted height to fit mobile screens perfectly -->
+        <video id="camera-stream" autoplay playsinline style="width: 100%; max-height: 50vh; object-fit: cover; border: 3px solid #444; border-radius: 8px; background: #000;"></video>
         
         <canvas id="snapshot-canvas" style="display: none;"></canvas>
         
-        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff;">Aim at the card's name and tap scan!</div>
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Aim at the bottom-left corner and tap scan!</div>
         
-        <button class="main-btn" id="capture-btn" onclick="captureAndScan()">Scan Text</button>
+        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Text</button>
     </div>
 </div>
         <div class="header-title-container">
@@ -665,11 +666,11 @@ async function captureAndScan() {
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     
-    // 2. Apply High-Contrast Filter for Holo Cards
+    // 2. Apply High-Contrast Filter
     applyOcrFilters(canvas); 
     
     btn.disabled = true;
-    statusMsg.innerText = "Analyzing card data... please wait.";
+    statusMsg.innerText = "Analyzing ID & Set Code... please wait.";
     statusMsg.style.color = "#ffcb05";
 
     try {
@@ -681,67 +682,72 @@ async function captureAndScan() {
 
         console.log("Raw OCR Text:", textFound); 
         const normalizedText = textFound.toLowerCase();
+        
+        let bestMatchCard = null;
 
-        // --- STEP 1: Find Set Code (Optional: Auto-Switch Series) ---
-        const setMatch = textFound.match(/([A-Za-z0-9]{3})\s*[I|1|l]?\s*\d{3}\s*\//);
+        // --- STEP 1: CHECK SET CODE (e.g., "MA4") ---
+        // Looks for 3 alphanumeric chars near a 3-digit number
+        const setMatch = textFound.match(/([a-zA-Z0-9]{3})\s*[I|1|l]?\s*\d{3}/);
         if (setMatch && typeof setCodeMap !== 'undefined') {
             let foundSetCode = setMatch[1].toUpperCase();
             if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
                 document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
                 statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
-                await changeSeries(); 
+                await changeSeries(); // Wait for the new set database to load
             }
         }
 
-        // --- STEP 2: Confidence Scoring System ---
-        let bestMatchCard = null;
-        let highestScore = 0;
+        // --- STEP 2: CHECK CARD NUMBER (PRIORITY 1) ---
+        // Looks strictly for the pattern "073/123" or "073 / 123" or "073|123"
+        const numberMatch = textFound.match(/(\d{3})\s*[\/|\\Il]\s*\d{3}/);
+        
+        if (numberMatch) {
+            const extractedId = numberMatch[1]; // This grabs just the "073"
+            // Search the database for this exact ID
+            bestMatchCard = allCards.find(c => c.id === extractedId);
+        }
 
-        for (let card of allCards) {
-            let score = 0;
+        // --- STEP 3: CHECK NAME (FALLBACK ONLY) ---
+        // If the ID was obscured, try matching the name with high strictness
+        if (!bestMatchCard) {
+            let highestScore = 0;
 
-            // 1. Check ID (Highest confidence if found next to a slash, e.g., "043/")
-            if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
-                score += 50; 
-            } else if (normalizedText.includes(card.id)) {
-                score += 5; // Low points, because '60' could be HP, not an ID
-            }
+            for (let card of allCards) {
+                let score = 0;
+                
+                // Exact Name
+                if (normalizedText.includes(card.name.toLowerCase())) {
+                    score += 100; 
+                }
 
-            // 2. Check Exact Name Match
-            if (normalizedText.includes(card.name.toLowerCase())) {
-                score += 100; // Instant win if the full name is found perfectly
-            }
+                // Fuzzy Words
+                const cardWords = card.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
+                let matchedWords = 0;
+                for (let word of cardWords) {
+                    if (normalizedText.includes(word)) {
+                        score += 20;
+                        matchedWords++;
+                    }
+                }
+                
+                if (cardWords.length > 1 && matchedWords >= Math.ceil(cardWords.length / 2)) {
+                    score += 30; 
+                }
 
-            // 3. Check Word-by-Word (Fuzzy Match)
-            // Example: "Oddish Erika" -> checks "oddish" and "erika" separately
-            const cardWords = card.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-            let matchedWords = 0;
-            
-            for (let word of cardWords) {
-                if (normalizedText.includes(word)) {
-                    score += 20;
-                    matchedWords++;
+                // Require a minimum of 40 points so it doesn't accidentally pick a card based on 1 generic word
+                if (score > highestScore && score >= 40) { 
+                    highestScore = score;
+                    bestMatchCard = card;
                 }
             }
-            
-            // Bonus points if it found MULTIPLE words from the same name
-            if (cardWords.length > 1 && matchedWords >= Math.ceil(cardWords.length / 2)) {
-                score += 30; 
-            }
-
-            // Check if this card is the new winner (Minimum 25 points to avoid random noise)
-            if (score > highestScore && score >= 25) { 
-                highestScore = score;
-                bestMatchCard = card;
-            }
         }
 
-        // --- STEP 3: Apply the Winner to the UI ---
+        // --- STEP 4: APPLY TO UI ---
         if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
             statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
             
-            // We put the EXACT ID into the search box to perfectly isolate it
+            // Put exactly the ID in the search box
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
 
@@ -750,7 +756,7 @@ async function captureAndScan() {
             }, 2000);
 
         } else {
-            statusMsg.innerText = "Couldn't confidently identify the card. Try tapping to focus!";
+            statusMsg.innerText = "Couldn't read ID (XXX/YYY) or Name clearly. Try again!";
             statusMsg.style.color = "#ff6b6b";
             btn.disabled = false;
         }
