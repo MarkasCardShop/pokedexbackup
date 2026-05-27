@@ -209,35 +209,21 @@
 </div>
 
 <div id="scannerModal" class="modal">
-    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; max-height: 95vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; position: relative;">
-        <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px; position: relative; z-index: 10;">&times;</span>
-        <h3 style="color: #ffcb05; margin-top: 0;">DEBUG SCANNER</h3>
+    <div class="modal-content" style="max-width: 500px; margin: 10% auto; padding: 20px; text-align: center; position: relative;">
+        <span class="close" onclick="closeScanner()" style="position: absolute; right: 20px; top: 10px; z-index: 10;">&times;</span>
+        <h3 style="color: #ffcb05; margin-top: 10px;">POKÉDEX SCANNER</h3>
         
-        <!-- Camera Container (Height: auto fixes the proportion issue) -->
-        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0;">
+        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0; margin-bottom: 15px; overflow: hidden;">
             <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto;"></video>
             
-            <!-- Targeting Overlay (Exactly 5% margins, Top strip 25%, Bottom strip 20%) -->
-            <div id="card-guide" style="position: absolute; top: 5%; left: 5%; width: 90%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 5px; display: flex; flex-direction: column; justify-content: space-between;">
-                <!-- Name Zone -->
-                <div style="width: 100%; height: 25%; border-bottom: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
-                <!-- ID/Set Zone -->
-                <div style="width: 100%; height: 20%; border-top: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
-            </div>
+            <div id="card-guide" style="position: absolute; top: 5%; left: 5%; width: 90%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 5px;"></div>
         </div>
         
-        <!-- Debug Panel -->
-        <div id="debug-panel" style="margin-top: 15px; width: 100%; border-top: 2px dashed #666; padding-top: 10px;">
-            <p style="color: #ffcb05; font-size: 0.8em; margin: 0 0 5px 0; font-weight: bold;">1. CROPPED & FILTERED IMAGE:</p>
-            <canvas id="snapshot-canvas" style="width: 100%; border: 2px solid #2ecc71; background: #222; border-radius: 5px;"></canvas>
-            
-            <p style="color: #ffcb05; font-size: 0.8em; margin: 10px 0 5px 0; font-weight: bold;">2. RAW OCR TEXT FOUND:</p>
-            <textarea id="debug-text" readonly style="width: 100%; height: 60px; background: #111; color: #fff; border: 1px solid #444; font-family: monospace; font-size: 0.9em; padding: 5px; box-sizing: border-box;"></textarea>
-        </div>
+        <canvas id="snapshot-canvas" style="display: none;"></canvas>
 
-        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align card inside the yellow box!</div>
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align the card inside the yellow box!</div>
         
-        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Text</button>
+        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Card</button>
     </div>
 </div>
         <div class="header-title-container">
@@ -676,25 +662,23 @@ async function captureAndScan() {
     const canvas = document.getElementById('snapshot-canvas');
     const statusMsg = document.getElementById('scan-status');
     const btn = document.getElementById('capture-btn');
-    const debugText = document.getElementById('debug-text');
 
-    // Take the picture
+    // Take the picture natively (No complex cropping needed for Gemini!)
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     btn.disabled = true;
-    statusMsg.innerText = "Transmitting to Gemini AI... please wait.";
+    statusMsg.innerText = "Transmitting to AI... please wait.";
     statusMsg.style.color = "#ffcb05";
-    debugText.value = "Waiting for AI analysis...";
 
     try {
         const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const base64Data = imageDataUrl.split(',')[1]; // Strip the metadata prefix
+        const base64Data = imageDataUrl.split(',')[1]; 
 
-        // --- THE MAGIC: Call Gemini directly from the browser! ---
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        // Call Gemini directly from the browser
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const payload = {
             "contents": [{
@@ -710,7 +694,6 @@ async function captureAndScan() {
             }]
         };
 
-        // This uses your phone's browser and local internet connection (bypassing Apps Script)
         const response = await fetch(geminiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -720,28 +703,25 @@ async function captureAndScan() {
         const json = await response.json();
 
         if (!response.ok) {
-            throw new Error(json.error.message || "API Request Failed");
+            throw new Error(json.error?.message || "API Request Failed");
         }
-        // ---------------------------------------------------------
 
-        // Clean up the JSON response
+        // Parse the AI's JSON response
         let aiText = json.candidates[0].content.parts[0].text;
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiData = JSON.parse(aiText);
         
-        debugText.value = JSON.stringify(aiData, null, 2);
-
-        // 1. Check Set Code and Auto-Switch
+        // 1. Check Set Code and Auto-Switch Data Sources
         if (aiData.set && typeof setCodeMap !== 'undefined') {
             const foundSetCode = aiData.set.toUpperCase();
             if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
                 document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
-                statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
+                statusMsg.innerText = `Loading ${setCodeMap[foundSetCode]}...`;
                 await changeSeries(); 
             }
         }
 
-        // 2. Find the Card in your database
+        // 2. Find the Card in the active database
         let bestMatchCard = null;
         
         if (aiData.id) {
@@ -753,28 +733,34 @@ async function captureAndScan() {
             bestMatchCard = allCards.find(c => c.name.toLowerCase().includes(aiData.name.toLowerCase()));
         }
 
-        // 3. Update the UI
+        // 3. Update the UI and Close Scanner
         if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
             statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
             
+            // Drop ID into search bar and filter
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
             
-            btn.innerText = "Scan Again";
-            btn.disabled = false;
+            // Wait 1.5 seconds so the user can see success, then close modal
+            setTimeout(() => {
+                closeScanner();
+                btn.innerText = "Scan Card";
+                btn.disabled = false;
+            }, 1500);
+
         } else {
-            statusMsg.innerText = `AI read: ${aiData.name} (#${aiData.id}), but couldn't find it.`;
+            statusMsg.innerText = `AI read: ${aiData.name || 'Unknown'} (#${aiData.id || '?'}), but couldn't find it in this set.`;
             statusMsg.style.color = "#ff6b6b";
             btn.innerText = "Try Again";
             btn.disabled = false;
         }
 
     } catch (error) {
-        console.error("Upload Error:", error);
-        debugText.value = "Error: " + error.message;
-        statusMsg.innerText = "Network Error. Check debug window.";
+        console.error("Scanner Error:", error);
+        statusMsg.innerText = "Network Error. Please check your connection.";
         statusMsg.style.color = "#ff6b6b";
+        btn.innerText = "Try Again";
         btn.disabled = false;
     }
 }
