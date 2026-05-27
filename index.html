@@ -212,22 +212,31 @@
 <div id="scannerModal" class="modal">
     <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; max-height: 95vh; overflow-y: auto; display: flex; flex-direction: column; align-items: center; position: relative;">
         <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px; position: relative; z-index: 10;">&times;</span>
-        <h3 style="color: #ffcb05; margin-top: 0;">POKÉDEX SCANNER</h3>
+        <h3 style="color: #ffcb05; margin-top: 0;">DEBUG SCANNER</h3>
         
-        <div style="position: relative; width: 100%; height: 40vh; overflow: hidden; border: 3px solid #444; border-radius: 8px; background: #000;">
-            <video id="camera-stream" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+        <!-- Camera Container (Height: auto fixes the proportion issue) -->
+        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0;">
+            <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto;"></video>
             
-            <div id="card-guide" style="position: absolute; top: 5%; left: 10%; width: 80%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 10px; display: flex; flex-direction: column; justify-content: space-between;">
+            <!-- Targeting Overlay (Exactly 5% margins, Top strip 25%, Bottom strip 20%) -->
+            <div id="card-guide" style="position: absolute; top: 5%; left: 5%; width: 90%; height: 90%; border: 2px solid #ffcb05; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); pointer-events: none; border-radius: 5px; display: flex; flex-direction: column; justify-content: space-between;">
+                <!-- Name Zone -->
                 <div style="width: 100%; height: 25%; border-bottom: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
+                <!-- ID/Set Zone -->
                 <div style="width: 100%; height: 20%; border-top: 2px dashed rgba(46, 204, 113, 0.8); background: rgba(46, 204, 113, 0.2);"></div>
             </div>
         </div>
         
+        <!-- Debug Panel -->
         <div id="debug-panel" style="margin-top: 15px; width: 100%; border-top: 2px dashed #666; padding-top: 10px;">
-            <p style="color: #ffcb05; font-size: 0.8em; margin: 0 0 5px 0; text-align: left; font-weight: bold;">DEBUG VIEW (What Tesseract Sees):</p>
+            <p style="color: #ffcb05; font-size: 0.8em; margin: 0 0 5px 0; font-weight: bold;">1. CROPPED & FILTERED IMAGE:</p>
             <canvas id="snapshot-canvas" style="width: 100%; border: 2px solid #2ecc71; background: #222; border-radius: 5px;"></canvas>
+            
+            <p style="color: #ffcb05; font-size: 0.8em; margin: 10px 0 5px 0; font-weight: bold;">2. RAW OCR TEXT FOUND:</p>
+            <textarea id="debug-text" readonly style="width: 100%; height: 60px; background: #111; color: #fff; border: 1px solid #444; font-family: monospace; font-size: 0.9em; padding: 5px; box-sizing: border-box;"></textarea>
         </div>
-        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align card in the box and tap scan!</div>
+
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align card inside the yellow box!</div>
         
         <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Text</button>
     </div>
@@ -662,33 +671,49 @@ const setCodeMap = {
     // You can add future sets here, e.g., "SV5": "Masa Depan",
 };
 
-async function captureAndScan() {
+    async function captureAndScan() {
     const video = document.getElementById('camera-stream');
     const canvas = document.getElementById('snapshot-canvas');
     const statusMsg = document.getElementById('scan-status');
     const btn = document.getElementById('capture-btn');
+    const debugText = document.getElementById('debug-text');
 
+    // --- 1. PERFECT SYNC CROPPING MATH ---
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     const ctx = canvas.getContext('2d');
 
-    const topHeight = vh * 0.25;
-    const bottomHeight = vh * 0.20;
-    const bottomStartY = vh * 0.80; 
+    // The yellow guide box is at top: 5%, left: 5%, width: 90%, height: 90%
+    const guideX = vw * 0.05;
+    const guideY = vh * 0.05;
+    const guideW = vw * 0.90;
+    const guideH = vh * 0.90;
 
-    canvas.width = vw;
-    canvas.height = topHeight + bottomHeight;
+    // Top Strip (Name): 25% of the guide's height
+    const topCropH = guideH * 0.25;
+    const topCropY = guideY;
 
-    ctx.drawImage(video, 0, 0, vw, topHeight, 0, 0, vw, topHeight);
-    ctx.drawImage(video, 0, bottomStartY, vw, bottomHeight, 0, topHeight, vw, bottomHeight);
+    // Bottom Strip (ID/Set): 20% of the guide's height
+    const bottomCropH = guideH * 0.20;
+    const bottomCropY = guideY + guideH - bottomCropH;
 
+    canvas.width = guideW;
+    canvas.height = topCropH + bottomCropH;
+
+    // Draw Top Strip to canvas
+    ctx.drawImage(video, guideX, topCropY, guideW, topCropH, 0, 0, guideW, topCropH);
+    // Draw Bottom Strip directly underneath
+    ctx.drawImage(video, guideX, bottomCropY, guideW, bottomCropH, 0, topCropH, guideW, bottomCropH);
+
+    // Apply Filter
     if (typeof applyOcrFilters === "function") {
         applyOcrFilters(canvas);
     }
     
     btn.disabled = true;
-    statusMsg.innerText = "Analyzing Target Zones... please wait.";
+    statusMsg.innerText = "Processing Image... please wait.";
     statusMsg.style.color = "#ffcb05";
+    debugText.value = "Reading text..."; // Reset debug text
 
     try {
         const imageDataUrl = canvas.toDataURL('image/jpeg');
@@ -697,7 +722,9 @@ async function captureAndScan() {
         const textFound = ret.data.text;
         await worker.terminate();
 
-        console.log("Stitched OCR Text:", textFound); 
+        // Print what Tesseract actually read to the UI
+        debugText.value = textFound || "[No text found]";
+        
         const normalizedText = textFound.toLowerCase().replace(/\n/g, ' '); 
         
         let bestMatchCard = null;
@@ -724,9 +751,9 @@ async function captureAndScan() {
             let hasRarity = card.rarity && card.rarity.trim() !== "";
             const exactName = card.name.toLowerCase();
 
-            // 1. NUMBER (Highest Priority Identifier)
+            // 1. NUMBER
             if (strictId === card.id) {
-                score += 2000; // Definitive match overrides everything
+                score += 2000; 
                 matchedNumber = true;
             } else if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
                 score += 500; 
@@ -760,8 +787,7 @@ async function captureAndScan() {
                 }
             }
 
-            // --- STRICT ENFORCEMENT ZONE ---
-            // If the card has no rarity, it MUST match the number to be considered.
+            // STRICT ENFORCEMENT ZONE
             if (!hasRarity && !matchedNumber) {
                 score -= 2500; 
             }
@@ -778,14 +804,16 @@ async function captureAndScan() {
             
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
-
-            setTimeout(() => {
-                closeScanner();
-            }, 2000);
+            
+            // Note: I removed the auto-close so you can read the debug text!
+            // You will have to tap the 'X' to close it manually for now.
+            btn.innerText = "Scan Again";
+            btn.disabled = false;
 
         } else {
-            statusMsg.innerText = "Target lost. Make sure the Name is in the top green box and ID in the bottom green box!";
+            statusMsg.innerText = "Match Failed. Check the raw text above!";
             statusMsg.style.color = "#ff6b6b";
+            btn.innerText = "Try Again";
             btn.disabled = false;
         }
 
