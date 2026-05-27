@@ -664,6 +664,7 @@ async function captureAndScan() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    applyOcrFilters(canvas); 
     
     btn.disabled = true;
     statusMsg.innerText = "Analyzing card data... please wait.";
