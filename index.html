@@ -4,7 +4,6 @@
     <base target="_top">
     <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
     <style>
         body {
@@ -296,7 +295,7 @@
     <script>
         // Paste your brand new Google Apps Script Web App URL here
         const API_URL = 'https://script.google.com/macros/s/AKfycbwMUirA7Lp08A7FK_0c0O8tt7nSEueRYHST8dmpJfEmM1UU33sRMn7Ncn5AJ6zd1FRu/exec';
-
+        const GEMINI_API_KEY = 'AIzaSyC_ExW6dTcbbdCTVNE1_P_nHvMLbQLKXp8';
         // This replaces google.script.run
         async function apiCall(action, payload = {}) {
             payload.action = action; 
@@ -678,151 +677,82 @@ const setCodeMap = {
     const btn = document.getElementById('capture-btn');
     const debugText = document.getElementById('debug-text');
 
-    // --- 1. PERFECT SYNC CROPPING & NATIVE FILTER MATH ---
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
+    // Just take a normal picture of the whole camera feed!
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const guideX = vw * 0.05;
-    const guideY = vh * 0.05;
-    const guideW = vw * 0.90;
-    const guideH = vh * 0.90;
-
-    const topCropH = guideH * 0.25;
-    const topCropY = guideY;
-    const bottomCropH = guideH * 0.20;
-    const bottomCropY = guideY + guideH - bottomCropH;
-
-    const scale = 2.0; 
-    canvas.width = guideW * scale;
-    canvas.height = (topCropH + bottomCropH) * scale;
-
-    // --- THE NEW MAGIC ---
-    // Let the browser handle the image enhancement natively!
-    // This blows out shadows (brightness) and sharpens text (contrast).
-    ctx.filter = 'grayscale(100%) contrast(300%) brightness(150%)';
-
-    // Draw and scale the Top Strip to canvas
-    ctx.drawImage(video, guideX, topCropY, guideW, topCropH, 0, 0, guideW * scale, topCropH * scale);
-    
-    // Draw and scale the Bottom Strip directly underneath
-    ctx.drawImage(video, guideX, bottomCropY, guideW, bottomCropH, 0, topCropH * scale, guideW * scale, bottomCropH * scale);
-
-    // Reset filter so it doesn't affect anything else
-    ctx.filter = 'none';
-
-    // (Note: Make sure you deleted the call to applyOcrFilters(canvas); that used to be here!)
-    
     btn.disabled = true;
-    statusMsg.innerText = "Processing Image... please wait.";
+    statusMsg.innerText = "Transmitting to Gemini AI... please wait.";
     statusMsg.style.color = "#ffcb05";
-    debugText.value = "Reading text..."; // Reset debug text
+    debugText.value = "Waiting for AI analysis...";
 
     try {
-        const imageDataUrl = canvas.toDataURL('image/jpeg');
-        const worker = await Tesseract.createWorker('eng');
-        const ret = await worker.recognize(imageDataUrl);
-        const textFound = ret.data.text;
-        await worker.terminate();
+        // Compress the image slightly so it uploads to your backend faster
+        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-        // Print what Tesseract actually read to the UI
-        debugText.value = textFound || "[No text found]";
-        
-        const normalizedText = textFound.toLowerCase().replace(/\n/g, ' '); 
-        
-        let bestMatchCard = null;
-        let highestScore = 0;
+        // Send the image to your Google Apps Script backend
+        const res = await apiCall('scanWithGemini', { imageBase64: imageDataUrl });
 
-        // Auto-Switch Series check
-        const setMatch = textFound.match(/([a-zA-Z0-9]{3})\s*[I|1|l]?\s*\d{3}/);
-        if (setMatch && typeof setCodeMap !== 'undefined') {
-            let foundSetCode = setMatch[1].toUpperCase();
-            if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
-                document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
-                statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
-                await changeSeries(); 
-            }
-        }
+        if (res.success && res.cardData) {
+            const aiData = res.cardData;
+            
+            // Show exactly what Gemini found in the debug window!
+            debugText.value = JSON.stringify(aiData, null, 2);
 
-        // Global Strict ID Extraction
-        const numberMatch = textFound.match(/(\d{3})\s*[\/|\\Il]\s*\d{3}/);
-        const strictId = numberMatch ? numberMatch[1] : null;
-
-        for (let card of allCards) {
-            let score = 0;
-            let matchedNumber = false;
-            let hasRarity = card.rarity && card.rarity.trim() !== "";
-            const exactName = card.name.toLowerCase();
-
-            // 1. NUMBER
-            if (strictId === card.id) {
-                score += 2000; 
-                matchedNumber = true;
-            } else if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
-                score += 500; 
-                matchedNumber = true;
-            } else if (normalizedText.includes(card.id)) {
-                score += 20;  
+            // 1. Check Set Code and Auto-Switch
+            if (aiData.set && typeof setCodeMap !== 'undefined') {
+                const foundSetCode = aiData.set.toUpperCase();
+                if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
+                    document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
+                    statusMsg.innerText = `Switching to ${setCodeMap[foundSetCode]}...`;
+                    await changeSeries(); 
+                }
             }
 
-            // 2. NAME
-            if (normalizedText.includes(exactName)) {
-                score += 1000; 
+            // 2. Find the Card in your database
+            let bestMatchCard = null;
+            
+            if (aiData.id) {
+                // Ensure the ID is padded to 3 digits (e.g., "73" becomes "073")
+                const paddedId = String(aiData.id).padStart(3, '0');
+                bestMatchCard = allCards.find(c => c.id === paddedId);
+            }
+
+            // Fallback: If ID failed, try matching the Name Gemini found
+            if (!bestMatchCard && aiData.name) {
+                bestMatchCard = allCards.find(c => c.name.toLowerCase().includes(aiData.name.toLowerCase()));
+            }
+
+            // 3. Update the UI
+            if (bestMatchCard) {
+                statusMsg.style.color = "#2ecc71";
+                statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
+                
+                document.getElementById('searchInput').value = bestMatchCard.id;
+                filterCards(); 
+                
+                btn.innerText = "Scan Again";
+                btn.disabled = false;
             } else {
-                const cardWords = exactName.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
-                let matchedWords = 0;
-                for (let word of cardWords) {
-                    if (normalizedText.includes(word)) {
-                        score += 100;
-                        matchedWords++;
-                    }
-                }
-                if (cardWords.length > 0 && matchedWords >= Math.ceil(cardWords.length / 2)) {
-                    score += 300; 
-                }
+                statusMsg.innerText = `AI read: ${aiData.name} (#${aiData.id}), but couldn't find it in this set.`;
+                statusMsg.style.color = "#ff6b6b";
+                btn.innerText = "Try Again";
+                btn.disabled = false;
             }
-
-            // 3. RARITY
-            if (hasRarity) {
-                const rarityRegex = new RegExp(`\\b${card.rarity.toLowerCase()}\\b`);
-                if (rarityRegex.test(normalizedText)) {
-                    score += 100;
-                }
-            }
-
-            // STRICT ENFORCEMENT ZONE
-            if (!hasRarity && !matchedNumber) {
-                score -= 2500; 
-            }
-
-            if (score > highestScore && score >= 200) { 
-                highestScore = score;
-                bestMatchCard = card;
-            }
-        }
-
-        if (bestMatchCard) {
-            statusMsg.style.color = "#2ecc71";
-            statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
-            
-            document.getElementById('searchInput').value = bestMatchCard.id;
-            filterCards(); 
-            
-            // Note: I removed the auto-close so you can read the debug text!
-            // You will have to tap the 'X' to close it manually for now.
-            btn.innerText = "Scan Again";
-            btn.disabled = false;
 
         } else {
-            statusMsg.innerText = "Match Failed. Check the raw text above!";
+            debugText.value = res.error || "AI returned empty data.";
+            statusMsg.innerText = "AI Failed to process image.";
             statusMsg.style.color = "#ff6b6b";
             btn.innerText = "Try Again";
             btn.disabled = false;
         }
 
     } catch (error) {
-        console.error("OCR Error:", error);
-        statusMsg.innerText = "Image processing failed.";
+        console.error("Upload Error:", error);
+        statusMsg.innerText = "Network Error. Please try again.";
         statusMsg.style.color = "#ff6b6b";
         btn.disabled = false;
     }
