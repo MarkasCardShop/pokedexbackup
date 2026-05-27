@@ -764,13 +764,27 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         // 2. Find the Card in the active database
         let bestMatchCard = null;
         
+        // Helper to "normalize" names (removes "ex", "mega", etc., and extra spaces)
+        const normalizeName = (name) => {
+            return name.toLowerCase()
+                .replace(/\s+(ex|mega|v|vmax|vstar|gx|tag team|sv)\b/g, '') // remove common suffixes
+                .replace(/[^a-z0-9]/g, '') // remove punctuation/spaces
+                .trim();
+        };
+
         if (aiData.id) {
             const paddedId = String(aiData.id).padStart(3, '0');
             bestMatchCard = allCards.find(c => c.id === paddedId);
         }
 
+        // Fallback: If ID didn't find a perfect match, try the "Smart Match"
         if (!bestMatchCard && aiData.name) {
-            bestMatchCard = allCards.find(c => c.name.toLowerCase().includes(aiData.name.toLowerCase()));
+            const normalizedAiName = normalizeName(aiData.name);
+            bestMatchCard = allCards.find(c => {
+                const normalizedDbName = normalizeName(c.name);
+                // Match if the core name is the same OR if the AI's name is inside the DB name
+                return normalizedDbName.includes(normalizedAiName) || normalizedAiName.includes(normalizedDbName);
+            });
         }
 
         // 3. Update the UI and Close Scanner
