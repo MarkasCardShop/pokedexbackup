@@ -716,7 +716,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         // --- 2. TRANSMIT TO GEMINI ---
         statusMsg.innerText = "Transmitting to AI... please wait.";
         
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const payload = {
             "contents": [{
