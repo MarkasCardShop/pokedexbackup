@@ -758,7 +758,10 @@ async function captureAndScan() {
 
     } catch (error) {
         console.error("Scanner Error:", error);
-        statusMsg.innerText = "Network Error. Please check your connection.";
+        
+        // Show the ACTUAL error on the screen instead of the generic message
+        statusMsg.innerText = "Error: " + error.message; 
+        
         statusMsg.style.color = "#ff6b6b";
         btn.innerText = "Try Again";
         btn.disabled = false;
