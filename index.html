@@ -810,13 +810,18 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         };
 
         if (aiData.id) {
-            // Safety measure: In case AI returns "126/193" as the ID, split it and just take the "126"
+            // Take just the number before any slash
             let cleanId = String(aiData.id).split('/')[0].trim();
             const paddedId = cleanId.padStart(3, '0');
-            bestMatchCard = allCards.find(c => c.id === paddedId);
+            
+            // FIX: Convert c.id to a string and pad it before comparing!
+            bestMatchCard = allCards.find(c => {
+                const dbId = String(c.id).trim().padStart(3, '0');
+                return dbId === paddedId;
+            });
         }
 
-        // Smart Name Match Fallback
+        // Smart Name Match Fallback (Runs if ID matching missed)
         if (!bestMatchCard && aiData.name) {
             const normalizedAiName = normalizeName(aiData.name);
             bestMatchCard = allCards.find(c => {
