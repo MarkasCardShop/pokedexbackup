@@ -210,18 +210,30 @@
 </div>
 
 <div id="scannerModal" class="modal">
-    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; max-height: 90vh; display: flex; flex-direction: column; align-items: center;">
+    <div class="modal-content" style="max-width: 500px; margin: 5% auto; padding: 20px; display: flex; flex-direction: column; align-items: center;">
         <span class="close" onclick="closeScanner()" style="align-self: flex-end; margin-bottom: 5px;">&times;</span>
         <h3 style="color: #ffcb05; margin-top: 0;">POKÉDEX SCANNER</h3>
         
-        <!-- Adjusted height to fit mobile screens perfectly -->
-        <video id="camera-stream" autoplay playsinline style="width: 100%; max-height: 50vh; object-fit: cover; border: 3px solid #444; border-radius: 8px; background: #000;"></video>
+        <!-- Wrapper for Camera and Targeting Guide -->
+        <div style="position: relative; width: 100%; border: 3px solid #444; border-radius: 8px; overflow: hidden; background: #000;">
+            <video id="camera-stream" autoplay playsinline style="width: 100%; display: block;"></video>
+            
+            <!-- The Targeting Guide Overlay -->
+            <div style="position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px solid #ffcb05; box-shadow: 0 0 0 1000px rgba(0,0,0,0.7); pointer-events: none;">
+                <!-- Top Zone (Name) -->
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 15%; background: rgba(227, 53, 13, 0.3); border-bottom: 1px dashed #e3350d; display: flex; align-items: center; justify-content: center;"><span style="color:white; font-size: 0.8em; opacity: 0.8;">NAME ZONE</span></div>
+                <!-- Bottom Zone (ID/Set) -->
+                <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 12%; background: rgba(227, 53, 13, 0.3); border-top: 1px dashed #e3350d; display: flex; align-items: center; justify-content: center;"><span style="color:white; font-size: 0.8em; opacity: 0.8;">ID ZONE</span></div>
+            </div>
+        </div>
         
+        <!-- Hidden canvases for processing -->
         <canvas id="snapshot-canvas" style="display: none;"></canvas>
+        <canvas id="stitched-canvas" style="display: none;"></canvas>
         
-        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Aim at the bottom-left corner and tap scan!</div>
+        <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Fit the card inside the box and tap scan!</div>
         
-        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Text</button>
+        <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; width: 100%;">Scan Target Zones</button>
     </div>
 </div>
         <div class="header-title-container">
@@ -656,38 +668,59 @@ const setCodeMap = {
 
 async function captureAndScan() {
     const video = document.getElementById('camera-stream');
-    const canvas = document.getElementById('snapshot-canvas');
+    const stitchedCanvas = document.getElementById('stitched-canvas');
     const statusMsg = document.getElementById('scan-status');
     const btn = document.getElementById('capture-btn');
 
-    // 1. Take the picture
-    const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // 2. Apply High-Contrast Filter
-    applyOcrFilters(canvas); 
-    
     btn.disabled = true;
-    statusMsg.innerText = "Analyzing Name & Details... please wait.";
+    statusMsg.innerText = "Cropping zones... please wait.";
     statusMsg.style.color = "#ffcb05";
 
+    // --- ZONE CROPPING MATH ---
+    // The visual guide is at 10% from the edges, taking up 80% width/height.
+    const vW = video.videoWidth;
+    const vH = video.videoHeight;
+    
+    const cardX = vW * 0.10;
+    const cardY = vH * 0.10;
+    const cardW = vW * 0.80;
+    const cardH = vH * 0.80;
+
+    // Name is in the top 15% of the card area
+    const nameZoneH = cardH * 0.15;
+    
+    // Set/ID is in the bottom 12% of the card area
+    const idZoneH = cardH * 0.12;
+    const idZoneY = cardY + (cardH * 0.88);
+
+    // Prepare the new stitched canvas (gluing top and bottom together)
+    stitchedCanvas.width = cardW;
+    stitchedCanvas.height = nameZoneH + idZoneH;
+    const ctx = stitchedCanvas.getContext('2d');
+
+    // 1. Draw Name Zone
+    ctx.drawImage(video, cardX, cardY, cardW, nameZoneH, 0, 0, cardW, nameZoneH);
+    
+    // 2. Draw ID Zone immediately below the Name Zone
+    ctx.drawImage(video, cardX, idZoneY, cardW, idZoneH, 0, nameZoneH, cardW, idZoneH);
+    
+    // 3. Apply High-Contrast Filter ONLY to the stitched image
+    applyOcrFilters(stitchedCanvas); 
+
     try {
-        const imageDataUrl = canvas.toDataURL('image/jpeg');
+        const imageDataUrl = stitchedCanvas.toDataURL('image/jpeg');
         const worker = await Tesseract.createWorker('eng');
         const ret = await worker.recognize(imageDataUrl);
         const textFound = ret.data.text;
         await worker.terminate();
 
-        console.log("Raw OCR Text:", textFound); 
-        // Replace newlines with spaces for easier word matching
+        console.log("Cleaned Zone OCR Text:", textFound); 
         const normalizedText = textFound.toLowerCase().replace(/\n/g, ' '); 
         
         let bestMatchCard = null;
         let highestScore = 0;
 
-        // --- HIERARCHY PRIORITY 1: SET CODE (To Auto-Switch Series) ---
+        // --- CHECK SET CODE ---
         const setMatch = textFound.match(/([a-zA-Z0-9]{3})\s*[I|1|l]?\s*\d{3}/);
         if (setMatch && typeof setCodeMap !== 'undefined') {
             let foundSetCode = setMatch[1].toUpperCase();
@@ -698,16 +731,15 @@ async function captureAndScan() {
             }
         }
 
-        // --- HIERARCHY PRIORITY 2: SCORING EVERY CARD ---
+        // --- HIERARCHY SCORING ---
         for (let card of allCards) {
             let score = 0;
-            
-            // 1. NAME (Highest Points)
             const exactName = card.name.toLowerCase();
+            
+            // 1. Name Matches
             if (normalizedText.includes(exactName)) {
-                score += 1000; // Massive points for exact name match
+                score += 1000; 
             } else {
-                // Fuzzy Name Match
                 const cardWords = exactName.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2);
                 let matchedWords = 0;
                 for (let word of cardWords) {
@@ -716,14 +748,12 @@ async function captureAndScan() {
                         matchedWords++;
                     }
                 }
-                // If it found the majority of the name words, give it a big bonus
                 if (cardWords.length > 0 && matchedWords >= Math.ceil(cardWords.length / 2)) {
                     score += 300; 
                 }
             }
 
-            // 2. RARITY (Secondary Points)
-            // Uses a word boundary (\b) so it doesn't accidentally match the letter 'c' inside the word 'attack'
+            // 2. Rarity Bonus
             if (card.rarity) {
                 const rarityRegex = new RegExp(`\\b${card.rarity.toLowerCase()}\\b`);
                 if (rarityRegex.test(normalizedText)) {
@@ -731,27 +761,23 @@ async function captureAndScan() {
                 }
             }
 
-            // 3. NUMBER (Tie-Breaker / Last Resort)
+            // 3. Number Tie-Breaker
             if (normalizedText.includes(card.id + "/") || normalizedText.includes(card.id + " /")) {
-                score += 200; // High confidence if found next to a slash
+                score += 200; 
             } else if (normalizedText.includes(card.id)) {
-                score += 20;  // Small tie-breaker points if just the number is floating somewhere
+                score += 20;  
             }
 
-            // Check if this card is the new winner. 
-            // We require a minimum of 200 points (Meaning it AT LEAST found the name or the ID + Rarity)
             if (score > highestScore && score >= 200) { 
                 highestScore = score;
                 bestMatchCard = card;
             }
         }
 
-        // --- APPLY WINNER TO UI ---
+        // --- UI UPDATE ---
         if (bestMatchCard) {
             statusMsg.style.color = "#2ecc71";
             statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
-            
-            // Put exactly the ID in the search box to filter the grid down to 1 card
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
 
@@ -760,7 +786,7 @@ async function captureAndScan() {
             }, 2000);
 
         } else {
-            statusMsg.innerText = "Couldn't clearly read Name. Try tapping the text to focus!";
+            statusMsg.innerText = "Targeting failed. Align Name & ID in the red zones!";
             statusMsg.style.color = "#ff6b6b";
             btn.disabled = false;
         }
