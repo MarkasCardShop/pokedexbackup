@@ -624,12 +624,38 @@ async function openScanner() {
     document.getElementById('capture-btn').disabled = false;
 
     try {
-        // Request access to the back camera (environment facing)
-        videoStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' } 
-        });
+        // --- THE FIX: Advanced Camera Constraints ---
+        // Requesting 1080p forces iPhones to use the Main Sensor instead of the Ultra-Wide
+        const constraints = { 
+            video: { 
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            } 
+        };
+
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = videoStream;
-        statusMsg.innerText = "Aim at the card's name and tap scan!";
+        
+        // Wait for the video to load before applying focus tricks
+        video.onloadedmetadata = () => {
+            video.play();
+            statusMsg.innerText = "Align the card inside the yellow box!";
+            
+            // Try to force Continuous Auto-Focus (Works on supported browsers/devices)
+            const track = videoStream.getVideoTracks()[0];
+            
+            // Check if the browser supports advanced focus controls
+            if (typeof track.getCapabilities === 'function') {
+                const capabilities = track.getCapabilities();
+                if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                    track.applyConstraints({
+                        advanced: [{ focusMode: 'continuous' }]
+                    }).catch(e => console.log("Focus constraint ignored by browser", e));
+                }
+            }
+        };
+
     } catch (err) {
         console.error("Camera access denied:", err);
         statusMsg.innerText = "Error: Camera access denied or not available.";
