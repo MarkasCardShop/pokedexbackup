@@ -782,20 +782,7 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
                     await changeSeries();
                 }
             }
-        // --------------------------------------------------------
-        // Attempt B (YOUR FIX): Fallback Validation using /xxx!
-        // If the AI couldn't read the set code because of AR artwork, guess the set using the denominator.
-        if (!switchedSet && aiData.set_total && typeof setTotalMap !== 'undefined') {
-            // Pad the total to 3 digits just in case (e.g., '66' becomes '066')
-            const foundTotal = String(aiData.set_total).padStart(3, '0'); 
-            
-            if (setTotalMap[foundTotal] && document.getElementById('seriesSelect').value !== setTotalMap[foundTotal]) {
-                document.getElementById('seriesSelect').value = setTotalMap[foundTotal];
-                statusMsg.innerText = `AR Detected: Auto-loading set via /${foundTotal}...`;
-                await changeSeries();
-            }
         }
-
         // --- 3. FIND THE CARD IN THE DATABASE ---
         let bestMatchCard = null;
         
@@ -821,7 +808,9 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
                 return normalizedDbName.includes(normalizedAiName) || normalizedAiName.includes(normalizedDbName);
             });
         }
-            
+
+        // Add this explicit if check:
+        if (bestMatchCard) {
             // Drop ID into search bar and filter
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
@@ -834,6 +823,12 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
             }, 1500);
 
         } else {
+            // Define the missing variables so the message can read them!
+            const readName = aiData.name || 'Unknown';
+            const readId = aiData.id || '?';
+            const readSet = aiData.set || 'Missing';
+            const readTotal = aiData.set_total ? `/${aiData.set_total}` : '';
+
             statusMsg.innerText = `AI read: ${readName} (#${readId}${readTotal}) [Set: ${readSet}], but couldn't find it in this set.`;
             statusMsg.style.color = "#ff6b6b";
             btn.innerText = "Try Again";
