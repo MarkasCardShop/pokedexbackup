@@ -709,10 +709,11 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
+        // --- 1. UPDATED AI INSTRUCTIONS ---
         const payload = {
             "contents": [{
                 "parts": [
-                    {"text": "You are a Pokemon card expert. Look at this card and output strictly a JSON object with three keys: 'name' (the Pokemon's name), 'id' (the 3-digit card number on the bottom, e.g., '126' or '073'), and 'set' (the 3-character set code on the bottom left, e.g., 'MA3' or 'MA4'). Do not include markdown, formatting, or conversational text. Just the JSON."},
+                    {"text": "You are a Pokemon card expert. Look at this card and output strictly a JSON object with 4 keys: 'name' (the Pokemon's name), 'id' (the card number on the LEFT of the slash, e.g., '126'), 'set_total' (the number on the RIGHT of the slash, e.g., '193'), and 'set' (the 3-character set code, e.g., 'MA3'). Do not include markdown or conversational text. Just the JSON."},
                     {
                         "inline_data": {
                             "mime_type": "image/jpeg",
@@ -735,53 +736,85 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
             throw new Error(json.error?.message || "API Request Failed");
         }
 
-        // Parse the AI's JSON response
         let aiText = json.candidates[0].content.parts[0].text;
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         const aiData = JSON.parse(aiText);
         
-        // ... (The rest of your code remains exactly the same from here down!)
-        
-        // 1. Check Set Code and Auto-Switch Data Sources
+        // --- 2. AUTO-SWITCH DATA SOURCES WITH STRICT PRIORITY ---
+        let validSetFound = false;
+
+        // Attempt A: STRICTLY prioritize the 3-letter Set Code (e.g., 'MA3')
         if (aiData.set && typeof setCodeMap !== 'undefined') {
             const foundSetCode = aiData.set.toUpperCase();
-            if (setCodeMap[foundSetCode] && document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
-                document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
-                statusMsg.innerText = `Loading ${setCodeMap[foundSetCode]}...`;
-                await changeSeries(); 
+            
+            // Check if this code actually exists in your database map
+            if (setCodeMap[foundSetCode]) {
+                validSetFound = true; // SUCCESS! We have a valid code. Lock out the fallback.
+                
+                // Only change the dropdown if we aren't already on this set
+                if (document.getElementById('seriesSelect').value !== setCodeMap[foundSetCode]) {
+                    document.getElementById('seriesSelect').value = setCodeMap[foundSetCode];
+                    statusMsg.innerText = `Loading ${setCodeMap[foundSetCode]}...`;
+                    await changeSeries(); 
+                }
             }
         }
 
-        // 2. Find the Card in the active database
+        // Attempt B: ONLY search the /xxx if Attempt A completely failed 
+        // (i.e., the AI couldn't read the code, or it hallucinated a fake code)
+        if (!validSetFound && aiData.set_total && typeof setTotalMap !== 'undefined') {
+            const foundTotal = String(aiData.set_total).padStart(3, '0'); 
+            
+            // Check if this denominator exists in your fallback map
+            if (setTotalMap[foundTotal]) {
+                
+                // Only change the dropdown if we aren't already on this set
+                if (document.getElementById('seriesSelect').value !== setTotalMap[foundTotal]) {
+                    document.getElementById('seriesSelect').value = setTotalMap[foundTotal];
+                    statusMsg.innerText = `Set Code unreadable. AR Fallback: Loading set via /${foundTotal}...`;
+                    await changeSeries();
+                }
+            }
+        }
+
+        // Attempt B (YOUR FIX): Fallback Validation using /xxx!
+        // If the AI couldn't read the set code because of AR artwork, guess the set using the denominator.
+        if (!switchedSet && aiData.set_total && typeof setTotalMap !== 'undefined') {
+            // Pad the total to 3 digits just in case (e.g., '66' becomes '066')
+            const foundTotal = String(aiData.set_total).padStart(3, '0'); 
+            
+            if (setTotalMap[foundTotal] && document.getElementById('seriesSelect').value !== setTotalMap[foundTotal]) {
+                document.getElementById('seriesSelect').value = setTotalMap[foundTotal];
+                statusMsg.innerText = `AR Detected: Auto-loading set via /${foundTotal}...`;
+                await changeSeries();
+            }
+        }
+
+        // --- 3. FIND THE CARD IN THE DATABASE ---
         let bestMatchCard = null;
         
-        // Helper to "normalize" names (removes "ex", "mega", etc., and extra spaces)
         const normalizeName = (name) => {
             return name.toLowerCase()
-                .replace(/\s+(ex|mega|v|vmax|vstar|gx|tag team|sv)\b/g, '') // remove common suffixes
-                .replace(/[^a-z0-9]/g, '') // remove punctuation/spaces
+                .replace(/\s+(ex|mega|v|vmax|vstar|gx|tag team|sv)\b/g, '')
+                .replace(/[^a-z0-9]/g, '')
                 .trim();
         };
 
         if (aiData.id) {
-            const paddedId = String(aiData.id).padStart(3, '0');
+            // Safety measure: In case AI returns "126/193" as the ID, split it and just take the "126"
+            let cleanId = String(aiData.id).split('/')[0].trim();
+            const paddedId = cleanId.padStart(3, '0');
             bestMatchCard = allCards.find(c => c.id === paddedId);
         }
 
-        // Fallback: If ID didn't find a perfect match, try the "Smart Match"
+        // Smart Name Match Fallback
         if (!bestMatchCard && aiData.name) {
             const normalizedAiName = normalizeName(aiData.name);
             bestMatchCard = allCards.find(c => {
                 const normalizedDbName = normalizeName(c.name);
-                // Match if the core name is the same OR if the AI's name is inside the DB name
                 return normalizedDbName.includes(normalizedAiName) || normalizedAiName.includes(normalizedDbName);
             });
         }
-
-        // 3. Update the UI and Close Scanner
-        if (bestMatchCard) {
-            statusMsg.style.color = "#2ecc71";
-            statusMsg.innerText = `Match Found: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
             
             // Drop ID into search bar and filter
             document.getElementById('searchInput').value = bestMatchCard.id;
