@@ -810,29 +810,29 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
         };
 
         if (aiData.id) {
-            // Take just the number before any slash
-            let cleanId = String(aiData.id).split('/')[0].trim();
+            // FIX 1: Aggressively strip out any #, spaces, or slashes the AI accidentally included
+            let cleanId = String(aiData.id).split('/')[0].replace(/[^a-zA-Z0-9]/g, '').trim();
             const paddedId = cleanId.padStart(3, '0');
             
-            // FIX: Convert c.id to a string and pad it before comparing!
             bestMatchCard = allCards.find(c => {
-                const dbId = String(c.id).trim().padStart(3, '0');
+                if (!c.id) return false; // Safety check
+                const dbId = String(c.id).replace(/[^a-zA-Z0-9]/g, '').trim().padStart(3, '0');
                 return dbId === paddedId;
             });
         }
 
-        // Smart Name Match Fallback (Runs if ID matching missed)
+        // Smart Name Match Fallback
         if (!bestMatchCard && aiData.name) {
             const normalizedAiName = normalizeName(aiData.name);
             bestMatchCard = allCards.find(c => {
+                if (!c.name) return false; // Safety check
                 const normalizedDbName = normalizeName(c.name);
                 return normalizedDbName.includes(normalizedAiName) || normalizedAiName.includes(normalizedDbName);
             });
         }
-
-        // Add this explicit if check:
+            
+        // Drop ID into search bar and filter
         if (bestMatchCard) {
-            // Drop ID into search bar and filter
             document.getElementById('searchInput').value = bestMatchCard.id;
             filterCards(); 
             
@@ -844,13 +844,13 @@ async function processImageWithGemini(base64Data, statusMsg, btn) {
             }, 1500);
 
         } else {
-            // Define the missing variables so the message can read them!
             const readName = aiData.name || 'Unknown';
             const readId = aiData.id || '?';
             const readSet = aiData.set || 'Missing';
             const readTotal = aiData.set_total ? `/${aiData.set_total}` : '';
 
-            statusMsg.innerText = `AI read: ${readName} (#${readId}${readTotal}) [Set: ${readSet}], but couldn't find it in this set.`;
+            // FIX 2: Added ${allCards.length} to tell us if the database is actually loaded!
+            statusMsg.innerText = `AI read: ${readName} (#${readId}${readTotal}) [Set: ${readSet}], but couldn't find it in ${allCards.length} loaded cards.`;
             statusMsg.style.color = "#ff6b6b";
             btn.innerText = "Try Again";
             btn.disabled = false;
