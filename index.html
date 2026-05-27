@@ -678,7 +678,7 @@ const setCodeMap = {
     const btn = document.getElementById('capture-btn');
     const debugText = document.getElementById('debug-text');
 
-    // --- 1. PERFECT SYNC CROPPING & UPSCALING MATH ---
+    // --- 1. PERFECT SYNC CROPPING & NATIVE FILTER MATH ---
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     const ctx = canvas.getContext('2d');
@@ -693,11 +693,14 @@ const setCodeMap = {
     const bottomCropH = guideH * 0.20;
     const bottomCropY = guideY + guideH - bottomCropH;
 
-    // OCR MAGIC TRICK: Upscale the cropped image by 2.5x 
-    // This makes tiny numbers (like 126/193) massive and easy to read
     const scale = 2.0; 
     canvas.width = guideW * scale;
     canvas.height = (topCropH + bottomCropH) * scale;
+
+    // --- THE NEW MAGIC ---
+    // Let the browser handle the image enhancement natively!
+    // This blows out shadows (brightness) and sharpens text (contrast).
+    ctx.filter = 'grayscale(100%) contrast(300%) brightness(150%)';
 
     // Draw and scale the Top Strip to canvas
     ctx.drawImage(video, guideX, topCropY, guideW, topCropH, 0, 0, guideW * scale, topCropH * scale);
@@ -705,10 +708,10 @@ const setCodeMap = {
     // Draw and scale the Bottom Strip directly underneath
     ctx.drawImage(video, guideX, bottomCropY, guideW, bottomCropH, 0, topCropH * scale, guideW * scale, bottomCropH * scale);
 
-    // Apply the new Binarization Filter
-    if (typeof applyOcrFilters === "function") {
-        applyOcrFilters(canvas);
-    }
+    // Reset filter so it doesn't affect anything else
+    ctx.filter = 'none';
+
+    // (Note: Make sure you deleted the call to applyOcrFilters(canvas); that used to be here!)
     
     btn.disabled = true;
     statusMsg.innerText = "Processing Image... please wait.";
