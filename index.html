@@ -953,7 +953,7 @@ async function captureAndScan() {
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
     const base64Data = imageDataUrl.split(',')[1]; 
 
-    await processImageWithGemini(base64Data, statusMsg, btn);
+    await hybridScan(base64Data, canvas, statusMsg, btn);
 }
 
 // New function for handling image uploads
@@ -986,7 +986,7 @@ function handleImageUpload(event) {
                videoStream.getTracks().forEach(track => track.stop());
             }
 
-            await processImageWithGemini(base64Data, statusMsg, btn);
+            await hybridScan(base64Data, canvas, statusMsg, btn);
             
             // Reset the input value so the same file can be uploaded again if needed
             document.getElementById('image-upload').value = '';
