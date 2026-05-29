@@ -512,23 +512,66 @@
         function changeSeries() { currentSeries = document.getElementById('seriesSelect').value; loadCardsForSeries(); }
 
         async function loadCardsForSeries() {
-            document.getElementById('status-msg').innerText = `Syncing ${currentSeries} Data...`;
-            document.getElementById('status-msg').style.display = 'block'; 
-            document.getElementById('cardGrid').innerHTML = '';
+    const cacheKey = `pokedex_set_${currentSeries}`;
+    
+    // --- 1. CHECK LOCAL STORAGE & EXPIRATION ---
+    const cachedString = localStorage.getItem(cacheKey);
+    
+    if (cachedString) {
+        const cachedObject = JSON.parse(cachedString);
+        const currentTime = new Date().getTime(); // Get current time in milliseconds
+        const ONE_HOUR = 60 * 60 * 1000; // 60 mins * 60 secs * 1000 ms
+
+        // Check if the cache is less than 1 hour old
+        if (currentTime - cachedObject.timestamp < ONE_HOUR) {
+            console.log(`⚡ Lightning Load: ${currentSeries} pulled from local cache!`);
             
-            const res = await apiCall('getCards', { 
-                seriesName: currentSeries, 
-                userSheetId: userSheetId 
-            });
-
-            if (res.success) {
-                allCards = res.cards; 
-                filterCards();
-            } else {
-                showError(res.error);
-            }
+            // Extract the cards array from the cached object
+            allCards = cachedObject.cards;
+            
+            document.getElementById('cardGrid').innerHTML = '';
+            document.getElementById('status-msg').style.display = 'none';
+            filterCards(); 
+            
+            return; // EXIT EARLY! Cache is still fresh.
+        } else {
+            console.log(`⏱️ Cache expired for ${currentSeries}. Fetching fresh data...`);
+            localStorage.removeItem(cacheKey); // Delete the old, expired data
         }
+    }
 
+    // --- 2. FETCH FROM GOOGLE SHEETS ---
+    console.log(`☁️ Fetching ${currentSeries} from Google Sheets...`);
+    document.getElementById('status-msg').innerText = `Syncing ${currentSeries} Data...`;
+    document.getElementById('status-msg').style.display = 'block'; 
+    document.getElementById('cardGrid').innerHTML = '';
+    
+    try {
+        const res = await apiCall('getCards', { 
+            seriesName: currentSeries, 
+            userSheetId: userSheetId 
+        });
+
+        if (res.success) {
+            allCards = res.cards; 
+            
+            // --- 3. SAVE TO CACHE WITH A TIMESTAMP ---
+            // Wrap the cards and the exact save time into a single object
+            const cacheDataToSave = {
+                timestamp: new Date().getTime(),
+                cards: allCards
+            };
+            
+            localStorage.setItem(cacheKey, JSON.stringify(cacheDataToSave));
+            
+            filterCards();
+        } else {
+            showError(res.error);
+        }
+    } catch (error) {
+        showError("Network Error: " + error.message);
+    }
+}
         function filterCards() {
             const term = document.getElementById('searchInput').value.toLowerCase();
             renderCards(allCards.filter(c => c.name.toLowerCase().includes(term) || c.id.includes(term)));
