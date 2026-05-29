@@ -695,12 +695,10 @@ async function hybridScan(base64Data, canvas, statusMsg, btn) {
 
     try {
         // --- 1. TESSERACT (LOCAL) PASS ---
-        // Tesseract reads the canvas directly
         const result = await Tesseract.recognize(canvas, 'eng', {
             logger: m => {
-                // Show a cool loading percentage while Tesseract thinks
                 if (m.status === 'recognizing text') {
-                    statusMsg.innerText = `Standard Scan: ${Math.round(m.progress * 100)}%`;
+                    statusMsg.innerText = `Processing with OCR: ${Math.round(m.progress * 100)}%`;
                 }
             }
         });
@@ -708,36 +706,52 @@ async function hybridScan(base64Data, canvas, statusMsg, btn) {
         const text = result.data.text;
         console.log("Tesseract Raw Output:", text);
 
-        // Regex: Look for anything resembling "014/193" or "26/165"
-        const fractionMatch = text.match(/(\d{1,3})\s*\/\s*\d{1,3}/);
+        // REGEX UPDATE: Now strictly extracts BOTH sides of the slash (e.g. 025 and 193)
+        const fractionMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
         let foundLocalMatch = false;
 
         if (fractionMatch) {
-            // Extract the left side of the slash and pad it
             let foundId = fractionMatch[1].padStart(3, '0');
+            let foundTotal = fractionMatch[2].padStart(3, '0'); // Extracts the /XXX
             
-            // Look for it in the CURRENTLY selected dropdown set
-            const bestMatchCard = allCards.find(c => {
+            // CRITERIA 1: Check if the ID exists in the current active set
+            const potentialCard = allCards.find(c => {
                 if (!c.id) return false;
                 const dbId = String(c.id).replace(/[^a-zA-Z0-9]/g, '').trim().padStart(3, '0');
                 return dbId === foundId;
             });
 
-            if (bestMatchCard) {
-                // TESSERACT SUCCESS! 
-                statusMsg.style.color = "#2ecc71";
-                statusMsg.innerText = `Fast Match: ${bestMatchCard.name} (#${bestMatchCard.id})!`;
-                
-                document.getElementById('searchInput').value = bestMatchCard.id;
-                filterCards(); 
-                
-                setTimeout(() => {
-                    closeScanner();
-                    btn.innerText = "Scan Camera";
-                    btn.disabled = false;
-                }, 1500);
-                
-                foundLocalMatch = true; 
+            if (potentialCard) {
+                // CRITERIA 2: Verify the Pokémon's Name is printed on the card
+                // Cleans out "ex", "v", etc., and checks if at least the first 5 letters of the name match
+                const cleanName = potentialCard.name.toLowerCase().replace(/\s+(ex|mega|v|vmax|vstar|gx|tag team|sv)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
+                const shortName = cleanName.length > 5 ? cleanName.substring(0, 5) : cleanName;
+                const hasNameMatch = text.toLowerCase().replace(/[^a-z0-9]/g, '').includes(shortName);
+
+                // CRITERIA 3: Verify the Set Total (/XXX) is a valid match in your database
+                let hasSetMatch = false;
+                if (typeof setTotalMap !== 'undefined' && setTotalMap[foundTotal]) {
+                    hasSetMatch = true;
+                }
+
+                // THE GATEKEEPER: All 3 criteria must be true to skip Gemini
+                if (hasNameMatch && hasSetMatch) {
+                    statusMsg.style.color = "#2ecc71";
+                    statusMsg.innerText = `Fast Match: ${potentialCard.name} (#${potentialCard.id})!`;
+                    
+                    document.getElementById('searchInput').value = potentialCard.id;
+                    filterCards(); 
+                    
+                    setTimeout(() => {
+                        closeScanner();
+                        btn.innerText = "Scan Camera";
+                        btn.disabled = false;
+                    }, 1500);
+                    
+                    foundLocalMatch = true; 
+                } else {
+                    console.log(`OCR False Positive Blocked: NameMatch=${hasNameMatch}, SetMatch=${hasSetMatch}`);
+                }
             }
         }
 
