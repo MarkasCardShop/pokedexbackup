@@ -370,11 +370,12 @@
         }
         // NEW FUNCTION: Fetch ORB Data
         async function loadOrbDatabase() {
-            console.log("Downloading ORB database...");
-            const response = await apiCall('getOrbData', {});
+            console.log("Downloading Global ORB database...");
+            // Notice we call the new global endpoint here
+            const response = await apiCall('getGlobalOrbData', {}); 
             if (response.success) {
                 orbDatabase = response.orbDatabase;
-                console.log(`Loaded ${orbDatabase.length} ORB signatures.`);
+                console.log(`Loaded ${orbDatabase.length} ORB signatures across all sets.`);
             }
         }
         async function attemptRegister() {
