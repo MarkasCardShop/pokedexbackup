@@ -7,6 +7,8 @@
     <link rel="icon" type="image/png" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
     <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" type="text/javascript"></script>
+    <style>
     <style>
         body {
             font-family: 'Nunito', sans-serif;
@@ -206,7 +208,8 @@
 
     <div id="app-screen">
         <div class="top-btn-container">
-    <button class="app-btn" onclick="openScanner()" style="background-color: #e3350d;">📷 Scan Card</button>
+    <button class="app-btn" onclick="openScanner('ocr')" style="background-color: #e3350d;">📷 Scan Text (OCR)</button>
+    <button class="app-btn" onclick="openScanner('orb')" style="background-color: #8e44ad;">🔮 Scan Image (ORB)</button>
     <button class="app-btn btn-settings" onclick="openSettings()">⚙️ Settings</button>
     <button class="app-btn" onclick="logout()">Save & Quit</button>
 </div>
@@ -314,7 +317,8 @@
         let userSheetId = sessionStorage.getItem("userSheetId") || null;
         let currentUserRole = sessionStorage.getItem("userRole") || "user";
         let currentUsername = sessionStorage.getItem("username") || "";
-
+        let orbDatabase = [];
+        let currentScanMode = 'ocr';
         document.addEventListener('DOMContentLoaded', () => {
             loadSetDataFromSheet();
             if (userSheetId) showAppScreen();
@@ -326,7 +330,7 @@
                     attemptLogin();
                 }
             };
-
+            
             // Listen for Enter on both the username and PIN fields
             document.getElementById('log-username').addEventListener('keypress', triggerLoginOnEnter);
             document.getElementById('log-pin').addEventListener('keypress', triggerLoginOnEnter);
@@ -364,7 +368,15 @@
                 btn.innerText = "Access Pokedex"; btn.disabled = false;
             }
         }
-
+        // NEW FUNCTION: Fetch ORB Data
+        async function loadOrbDatabase() {
+            console.log("Downloading ORB database...");
+            const response = await apiCall('getOrbData', {});
+            if (response.success) {
+                orbDatabase = response.orbDatabase;
+                console.log(`Loaded ${orbDatabase.length} ORB signatures.`);
+            }
+        }
         async function attemptRegister() {
             const user = document.getElementById('reg-username').value.trim();
             const mobile = document.getElementById('reg-mobile').value.trim();
@@ -622,10 +634,22 @@
 
 let videoStream = null;
 
-async function openScanner() {
+async function openScanner(mode = 'ocr') {
+    currentScanMode = mode; // Save the selected mode
+    
     const modal = document.getElementById('scannerModal');
     const video = document.getElementById('camera-stream');
     const statusMsg = document.getElementById('scan-status');
+    const title = document.querySelector('#scannerModal h3'); // Get modal title
+
+    // Update UI based on mode
+    if (currentScanMode === 'orb') {
+        title.innerText = "ORB IMAGE SCANNER";
+        title.style.color = "#8e44ad";
+    } else {
+        title.innerText = "POKÉDEX TEXT SCANNER";
+        title.style.color = "#ffcb05";
+    }
     
     modal.style.display = "block";
     statusMsg.innerText = "Starting camera...";
@@ -959,7 +983,6 @@ async function captureAndScan() {
     const statusMsg = document.getElementById('scan-status');
     const btn = document.getElementById('capture-btn');
 
-    // Take the picture natively
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
@@ -968,7 +991,12 @@ async function captureAndScan() {
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
     const base64Data = imageDataUrl.split(',')[1]; 
 
-    await hybridScan(base64Data, canvas, statusMsg, btn);
+    // NEW: Route to correct function based on the button clicked
+    if (currentScanMode === 'orb') {
+        await processOrbScan(canvas, statusMsg, btn);
+    } else {
+        await hybridScan(base64Data, canvas, statusMsg, btn);
+    }
 }
 
 // New function for handling image uploads
@@ -1041,6 +1069,119 @@ function applyOcrFilters(canvas) {
         }
     } catch (error) {
         console.error("Network error loading sets:", error);
+    }
+}
+        // --- NEW ORB FEATURE MATCHING LOGIC ---
+async function processOrbScan(canvas, statusMsg, btn) {
+    statusMsg.innerText = "Running ORB Feature Matching...";
+    statusMsg.style.color = "#fff";
+    btn.disabled = true;
+
+    // Safety check: Ensure OpenCV has finished loading
+    if (typeof cv === 'undefined' || !cv.Mat) {
+        statusMsg.innerText = "Error: OpenCV Library is still loading. Try again in a few seconds.";
+        statusMsg.style.color = "#ff6b6b";
+        btn.disabled = false;
+        return;
+    }
+
+    if (orbDatabase.length === 0) {
+        statusMsg.innerText = "Error: ORB Database is empty or hasn't loaded yet.";
+        statusMsg.style.color = "#ff6b6b";
+        btn.disabled = false;
+        return;
+    }
+
+    try {
+        // 1. Convert Canvas to OpenCV Matrix and make Grayscale
+        let src = cv.imread(canvas);
+        let gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+        // 2. Detect ORB features on the live camera image
+        let orb = new cv.ORB(500); // Limit to max 500 features for performance
+        let kp = new cv.KeyPointVector();
+        let des = new cv.Mat();
+        orb.detectAndCompute(gray, new cv.Mat(), kp, des);
+
+        if (des.empty()) {
+            statusMsg.innerText = "No features detected. Ensure good lighting and retake.";
+            statusMsg.style.color = "#ff6b6b";
+            btn.disabled = false;
+            src.delete(); gray.delete(); orb.delete(); kp.delete(); des.delete();
+            return;
+        }
+
+        // 3. Prepare the Matcher
+        let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+        let bestMatch = null;
+        let maxGoodMatches = 0;
+
+        statusMsg.innerText = `Comparing against ${orbDatabase.length} cards...`;
+
+        // 4. Compare live descriptors against every card in the Google Sheet Database
+        for (let i = 0; i < orbDatabase.length; i++) {
+            let dbItem = orbDatabase[i];
+            
+            // Reconstruct the stored descriptors array into an OpenCV Matrix
+            // ORB descriptors are always 32 columns wide (CV_8U)
+            let dbDes = cv.matFromArray(dbItem.rows, 32, cv.CV_8U, dbItem.descriptors);
+
+            let matches = new cv.DMatchVector();
+            
+            try {
+                bf.match(des, dbDes, matches);
+                
+                // Filter matches based on Hamming distance threshold (Lower is better)
+                let goodMatches = 0;
+                for (let j = 0; j < matches.size(); j++) {
+                    if (matches.get(j).distance < 50) { 
+                        goodMatches++;
+                    }
+                }
+
+                if (goodMatches > maxGoodMatches) {
+                    maxGoodMatches = goodMatches;
+                    bestMatch = dbItem;
+                }
+            } catch (matchErr) {
+                console.warn("Skipped a card due to matrix mismatch:", matchErr);
+            }
+
+            dbDes.delete();
+            matches.delete();
+        }
+
+        // 5. Evaluate the results
+        // 15 is a standard threshold. Adjust higher if you get false positives, lower if you get misses.
+        if (bestMatch && maxGoodMatches > 15) {
+            statusMsg.innerText = `ORB Match: ${bestMatch.name} (#${bestMatch.id})!`;
+            statusMsg.style.color = "#2ecc71";
+            
+            // Auto-search the matched card
+            document.getElementById('searchInput').value = bestMatch.id;
+            filterCards(); 
+            
+            setTimeout(() => {
+                closeScanner();
+                btn.innerText = "Scan Camera";
+                btn.disabled = false;
+            }, 1500);
+            
+        } else {
+            statusMsg.innerText = `No confident match. (Highest: ${maxGoodMatches} points)`;
+            statusMsg.style.color = "#ffcb05";
+            btn.disabled = false;
+        }
+
+        // 6. Memory Cleanup (Crucial for OpenCV in browsers)
+        src.delete(); gray.delete(); orb.delete(); kp.delete(); des.delete(); bf.delete();
+
+    } catch (error) {
+        console.error("ORB Scan Error:", error);
+        statusMsg.innerText = "Image Processing Error.";
+        statusMsg.style.color = "#ff6b6b";
+        btn.disabled = false;
     }
 }
     </script>
