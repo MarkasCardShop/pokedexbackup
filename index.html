@@ -3,21 +3,15 @@
 <head>
     <base target="_top">
     <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
-    <link href="https://fonts.cdnfonts.com/css/pokemon-solid" rel="stylesheet">
-    
     <link rel="icon" type="image/png" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
     <link rel="apple-touch-icon" href="https://i.ibb.co.com/zT6Pq86r/Pokedex-Markas.png">
-    
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" type="text/javascript"></script>
-    
     <style>
         body {
             font-family: 'Nunito', sans-serif;
             background-color: #1a1a1d;
-            background-image: radial-gradient(#2a2a2d 2px, transparent 2px), radial-gradient(#2a2a2d 2px, transparent 2px);
+            background-image: radial-gradient(#2a2a2d 2px, transparent 2px), radial-gradient(#2a2a2d F2px, transparent 2px);
             background-size: 30px 30px;
             background-position: 0 0, 15px 15px;
             color: #ffffff;
@@ -25,100 +19,68 @@
             padding: 20px;
         }
 
-        h1 {
-            font-family: 'Pokemon Solid', 'Nunito', sans-serif;
-            text-align: center; font-size: 3em; letter-spacing: 3px;
-            color: #ffcb05; -webkit-text-stroke: 2px #2a75bb; text-shadow: 5px 5px 0px #2a75bb; text-transform: uppercase;
-            margin-top: 10px;
+        /* --- Logo Styles --- */
+        .header-title-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .header-title-container h1 {
+            margin-bottom: 0; 
+        }
+        .app-logo {
+            max-width: 100px;
+            margin: -10px auto 15px auto;
+            display: block;
+            background-color: #f4f4f4; 
+            padding: 10px;
+            border-radius: 15px;
+            border: 3px solid #e3350d;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .header-logo {
+            max-width: 60px;
+            background-color: #f4f4f4;
+            padding: 5px;
+            border-radius: 10px;
+            border: 3px solid #e3350d;
+            margin-right: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
 
-        .top-btn-container { 
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 20px; 
+        h1 {
+            text-align: center; font-size: 3em; letter-spacing: 3px;
+            color: #ffcb05; -webkit-text-stroke: 2px #2a75bb; text-shadow: 5px 5px 0px #2a75bb; text-transform: uppercase;
         }
         
-        .app-btn { 
-            background-color: #444; 
-            border: 3px solid #222; 
-            box-shadow: 0 4px 0px #111; 
-            padding: 10px 10px; 
-            border-radius: 8px; 
-            color: white; 
-            cursor: pointer; 
-            font-weight: 900; 
-            text-transform: uppercase; 
-            flex: 1 1 45%; 
-            font-size: 0.85em; 
+        .auth-screen {
+            max-width: 400px; margin: 40px auto; background-color: #222; padding: 30px;
+            border-radius: 15px; border: 4px solid #e3350d; border-top: 20px solid #e3350d;
+            text-align: center; box-shadow: 0 10px 0px #111;
         }
-        
-        .app-btn:active { transform: translateY(4px); box-shadow: none; }
-        .btn-settings { background-color: #2a75bb; }
-    
-            /* --- Logo Styles --- */
-            .header-title-container {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                margin-bottom: 30px;
-            }
-            .header-title-container h1 {
-                margin-bottom: 0; 
-            }
-            .app-logo {
-                max-width: 100px;
-                margin: -10px auto 15px auto;
-                display: block;
-                background-color: #f4f4f4; 
-                padding: 10px;
-                border-radius: 15px;
-                border: 3px solid #e3350d;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            }
-            .header-logo {
-                max-width: 60px;
-                background-color: #f4f4f4;
-                padding: 5px;
-                border-radius: 10px;
-                border: 3px solid #e3350d;
-                margin-right: 15px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            }
-    
-            h1 {
-                text-align: center; font-size: 3em; letter-spacing: 3px;
-                color: #ffcb05; -webkit-text-stroke: 2px #2a75bb; text-shadow: 5px 5px 0px #2a75bb; text-transform: uppercase;
-            }
-            
-            .auth-screen {
-                max-width: 400px; margin: 40px auto; background-color: #222; padding: 30px;
-                border-radius: 15px; border: 4px solid #e3350d; border-top: 20px solid #e3350d;
-                text-align: center; box-shadow: 0 10px 0px #111;
-            }
-            .auth-screen h2 { margin-top: -5px; color: #fff; letter-spacing: 1px; }
-            .auth-screen input, .modal input {
-                width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 3px solid #444;
-                background-color: #111; color: white; font-size: 1.2em; font-family: 'Nunito', sans-serif;
-                font-weight: bold; box-sizing: border-box; text-align: center;
-            }
-            .auth-screen input:focus, .modal input:focus { border-color: #ffcb05; outline: none; }
-    
-            button.main-btn {
-                background-color: #ffcb05; color: #2a75bb; border: 3px solid #2a75bb; padding: 12px 20px;
-                font-size: 1.2em; font-family: 'Nunito', sans-serif; font-weight: 900; border-radius: 8px;
-                cursor: pointer; width: 90%; margin-top: 15px; text-transform: uppercase;
-                box-shadow: 0 6px 0 #2a75bb; transition: all 0.1s;
-            }
-            button.main-btn:active { transform: translateY(6px); box-shadow: none; }
-            button.main-btn:disabled { background-color: #555; color: #888; border-color: #333; box-shadow: 0 6px 0 #333; }
-            .auth-screen button.switch-btn { background: none; border: none; color: #ffcb05; margin-top: 25px; cursor: pointer; font-weight: bold; font-size: 0.9em; }
-            .auth-error { color: #ff6b6b; margin-top: 10px; display: none; font-weight: bold; background: rgba(255,0,0,0.1); padding: 5px; border-radius: 5px;}
-            .auth-success { color: #2ecc71; margin-top: 10px; display: none; font-weight: bold; background: rgba(46,204,113,0.1); padding: 5px; border-radius: 5px;}
-            .auth-note { font-size: 0.8em; color: #888; margin-top: 15px; }
-    
-            #register-screen, #app-screen { display: none; }
+        .auth-screen h2 { margin-top: -5px; color: #fff; letter-spacing: 1px; }
+        .auth-screen input, .modal input {
+            width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 3px solid #444;
+            background-color: #111; color: white; font-size: 1.2em; font-family: 'Nunito', sans-serif;
+            font-weight: bold; box-sizing: border-box; text-align: center;
+        }
+        .auth-screen input:focus, .modal input:focus { border-color: #ffcb05; outline: none; }
+
+        button.main-btn {
+            background-color: #ffcb05; color: #2a75bb; border: 3px solid #2a75bb; padding: 12px 20px;
+            font-size: 1.2em; font-family: 'Nunito', sans-serif; font-weight: 900; border-radius: 8px;
+            cursor: pointer; width: 90%; margin-top: 15px; text-transform: uppercase;
+            box-shadow: 0 6px 0 #2a75bb; transition: all 0.1s;
+        }
+        button.main-btn:active { transform: translateY(6px); box-shadow: none; }
+        button.main-btn:disabled { background-color: #555; color: #888; border-color: #333; box-shadow: 0 6px 0 #333; }
+        .auth-screen button.switch-btn { background: none; border: none; color: #ffcb05; margin-top: 25px; cursor: pointer; font-weight: bold; font-size: 0.9em; }
+        .auth-error { color: #ff6b6b; margin-top: 10px; display: none; font-weight: bold; background: rgba(255,0,0,0.1); padding: 5px; border-radius: 5px;}
+        .auth-success { color: #2ecc71; margin-top: 10px; display: none; font-weight: bold; background: rgba(46,204,113,0.1); padding: 5px; border-radius: 5px;}
+        .auth-note { font-size: 0.8em; color: #888; margin-top: 15px; }
+
+        #register-screen, #app-screen { display: none; }
     
             /* --- STICKY Controls Area --- */
             .controls-container {
