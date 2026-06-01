@@ -377,13 +377,24 @@
             console.log("Downloading Global ORB database...");
             try {
                 const response = await apiCall('getGlobalOrbData', {}); 
-                if (response.success) {
+                
+                // If it successfully fetched cards
+                if (response.success && response.orbDatabase && response.orbDatabase.length > 0) {
+                    
+                    // Check if it returned a backend error masquerading as data
+                    if(response.orbDatabase[0].id === "ERROR") {
+                        alert("Google Sheet Error: " + response.orbDatabase[0].name);
+                        return;
+                    }
+                    
                     console.log(`Downloaded ${response.orbDatabase.length} cards. Processing images...`);
                     await parseOrbImages(response.orbDatabase);
                 } else {
-                    console.error("Backend ORB Error:", response.error);
+                    // This will pop up if it pulled 0 cards
+                    alert(`Database Issue: Backend returned 0 cards. Check your ORB_SHEET_ID and make sure you deployed as a 'New Version'.`);
                 }
             } catch (error) {
+                alert("Network Error: Could not connect to Google Apps Script.");
                 console.error("Network Error downloading ORB:", error);
             }
         }
