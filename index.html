@@ -1054,17 +1054,26 @@
         }
 
         async function processOrbScan(canvas, statusMsg, btn) {
-            // 1. Show the text immediately
+            // Get your video element (change 'video' to your actual video element ID if different)
+            const videoEl = document.getElementById('video'); 
+            
+            // 1. Freeze the camera live view immediately
+            if (videoEl) {
+                videoEl.pause();
+            }
+
+            // 2. Show the matching status text
             statusMsg.innerText = "Matching the card...";
             statusMsg.style.color = "#ffcb05";
             btn.disabled = true;
 
-            // 2. Pause for 50 milliseconds so the browser actually draws the text on screen
+            // 3. Pause for 50ms so the browser updates the UI before running heavy math
             setTimeout(async () => {
                 if (parsedOrbDatabase.length === 0) {
                     statusMsg.innerText = "Error: Database is empty or still loading.";
                     statusMsg.style.color = "#ff6b6b";
                     btn.disabled = false;
+                    if (videoEl) videoEl.play(); // Resume live view on error
                     return;
                 }
 
@@ -1082,6 +1091,10 @@
                         statusMsg.innerText = "No features detected. Ensure good lighting and retake.";
                         statusMsg.style.color = "#ff6b6b";
                         btn.disabled = false;
+                        
+                        // Resume live view so they can try aligning it again
+                        if (videoEl) videoEl.play(); 
+                        
                         src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete();
                         return;
                     }
@@ -1131,6 +1144,7 @@
                         document.getElementById('searchInput').value = bestMatch.id;
                         filterCards(); 
                         
+                        // Keep camera frozen while closing out
                         setTimeout(() => {
                             closeScanner();
                             btn.innerText = "Scan Camera";
@@ -1141,6 +1155,9 @@
                         statusMsg.innerText = `No confident match found.`;
                         statusMsg.style.color = "#ffcb05";
                         btn.disabled = false;
+                        
+                        // Unfreeze the camera so they can adjust the positioning/lighting
+                        if (videoEl) videoEl.play(); 
                     }
 
                     src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete(); bf.delete();
@@ -1150,8 +1167,11 @@
                     statusMsg.innerText = "Image Processing Error.";
                     statusMsg.style.color = "#ff6b6b";
                     btn.disabled = false;
+                    
+                    // Unfreeze on layout processing crashes
+                    if (videoEl) videoEl.play(); 
                 }
-            }, 50); // End of the 50ms pause
+            }, 50); 
         }
         // Run this when your app loads the database from Google Sheets
 function convertStringToDescriptor(descriptorString) {
