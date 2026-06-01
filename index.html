@@ -606,6 +606,17 @@
             document.getElementById('status-msg').style.display = 'none'; 
             grid.innerHTML = '';
             
+            // 1. Reverse lookup: Find the Set Code (e.g., "sv8a") from the current Set Name
+            let activeSetCode = currentSeries.toLowerCase(); // Fallback
+            if (typeof setCodeMap !== 'undefined') {
+                for (let code in setCodeMap) {
+                    if (setCodeMap[code] === currentSeries) {
+                        activeSetCode = code.toLowerCase();
+                        break;
+                    }
+                }
+            }
+            
             cardsToRender.forEach(card => {
                 const div = document.createElement('div'); 
                 div.className = `card-item ${card.owned ? 'owned' : ''}`; 
@@ -613,14 +624,21 @@
                 
                 const img = card.imageUrl ? card.imageUrl : 'https://via.placeholder.com/200x280.png?text=???';
                 
+                // 2. Build the exact Cardtell URL (e.g., pikachu+ex+236+sv8a)
+                const rawQuery = `${card.name} ${card.id} ${activeSetCode}`;
+                const searchUrl = `https://cardtell.id/search?q=${encodeURIComponent(rawQuery).replace(/%20/g, '+')}`;
+                
                 div.innerHTML = `
                     <img src="${img}" class="card-image" loading="lazy" onclick="openImageModal('${img}')">
                     <div class="card-number">#${card.id}</div>
                     <div class="card-title">${card.name}</div>
                     <div class="rarity-badge rarity-${card.rarity}">${card.rarity}</div>
-                    <label class="checkbox-container">
+                    <label class="checkbox-container" style="margin-bottom: 15px;">
                         <input type="checkbox" onchange="toggleOwned('${card.id}', this.checked)" ${card.owned ? 'checked' : ''}>CAUGHT
-                    </label>`;
+                    </label>
+                    <button onclick="window.open('${searchUrl}', '_blank')" class="main-btn" style="width: 100%; margin: 0; padding: 8px; font-size: 0.9em; background-color: #2a75bb; color: #ffcb05; border-color: #1a5288; box-shadow: 0 4px 0 #1a5288;">
+                        🛒 Search Cardtell
+                    </button>`;
                     
                 grid.appendChild(div);
             });
