@@ -133,6 +133,28 @@
         .modal h3 { color: #ffcb05; }
         .admin-zone h3 { color: #e3350d; }
     
+        /* --- Cardtell Button Styles --- */
+        .cardtell-btn {
+            width: 100%;
+            margin-top: 5px;
+            padding: 8px 4px;
+            font-size: 0.85em;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            background-color: #2a75bb;
+            color: #ffcb05;
+            border: 2px solid #1a5288;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #1a5288;
+            text-transform: uppercase;
+            transition: all 0.1s;
+        }
+        .cardtell-btn:active {
+            transform: translateY(3px);
+            box-shadow: none;
+        }
+        
         @media (max-width: 600px) {
             body { padding: 10px; } 
             h1 { font-size: 1.8em; }
@@ -147,6 +169,14 @@
             .card-title { font-size: 0.65em; margin-bottom: 5px; min-height: 2.8em; line-height: 1.1; word-wrap: break-word; }
             .rarity-badge { font-size: 0.55em; padding: 2px 4px; margin-bottom: 5px; }
             .checkbox-container { font-size: 0.6em; gap: 2px; flex-direction: column; } .checkbox-container input { width: 16px; height: 16px; }
+            .cardtell-btn {
+                font-size: 0.55em; /* Matches your rarity badge size */
+                padding: 4px 2px;
+                border-width: 1px;
+                border-radius: 4px;
+                box-shadow: 0 2px 0 #1a5288;
+                margin-top: 2px;
+            }
         }
         
         /* Image Preview Modal */
@@ -636,8 +666,8 @@
                     <label class="checkbox-container" style="margin-bottom: 15px;">
                         <input type="checkbox" onchange="toggleOwned('${card.id}', this.checked)" ${card.owned ? 'checked' : ''}>CAUGHT
                     </label>
-                    <button onclick="window.open('${searchUrl}', '_blank')" class="main-btn" style="width: 100%; margin: 0; padding: 8px; font-size: 0.9em; background-color: #2a75bb; color: #ffcb05; border-color: #1a5288; box-shadow: 0 4px 0 #1a5288;">
-                        🛒 Search Cardtell
+                    <button onclick="window.open('${searchUrl}', '_blank')" class="cardtell-btn">
+                        🛒 Cardtell
                     </button>`;
                     
                 grid.appendChild(div);
