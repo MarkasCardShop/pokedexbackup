@@ -284,7 +284,7 @@
     </div>
     
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwMUirA7Lp08A7FK_0c0O8tt7nSEueRYHST8dmpJfEmM1UU33sRMn7Ncn5AJ6zd1FRu/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbx0kKFXkwI7MWxnUuzl9EF919QzVYUDVrtpauaWIQsZ26LArYsYkXTUzwClsheFPQ/exec';
 
         async function apiCall(action, payload = {}) {
             payload.action = action; 
@@ -423,62 +423,47 @@
 
         // Quietly convert PNG strings into OpenCV math
         async function parseOrbImages(rawDb, statusEl) {
-            parsedOrbDatabase = [];
-            
-            if (typeof cv === 'undefined' || !cv.Mat) {
-                statusEl.innerText = "Waiting for OpenCV to load...";
-                setTimeout(() => parseOrbImages(rawDb, statusEl), 1000);
-                return;
-            }
+    parsedOrbDatabase = [];
+    
+    if (typeof cv === 'undefined' || !cv.Mat) {
+        statusEl.innerText = "Waiting for OpenCV to load...";
+        setTimeout(() => parseOrbImages(rawDb, statusEl), 1000);
+        return;
+    }
 
-            statusEl.innerText = `Step 3: Processing ${rawDb.length} images (this takes a few seconds)...`;
-            let orb = new cv.ORB(500);
-            let successCount = 0;
-            let failCount = 0;
-            let firstError = ""; // We will use this to catch the exact error reason
+    statusEl.innerText = `Step 3: Loading ${rawDb.length} ORB signatures...`;
+    let successCount = 0;
+    let failCount = 0;
 
-            for (let i = 0; i < rawDb.length; i++) {
-                let card = rawDb[i];
-                try {
-                    let img = await loadImageAsync(card.orbCode);
-                    let mat = cv.imread(img);
-                    let gray = new cv.Mat();
-                    cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY, 0);
-
-                    let kp = new cv.KeyPointVector();
-                    let des = new cv.Mat();
-                    orb.detectAndCompute(gray, new cv.Mat(), kp, des);
-
-                    if (!des.empty()) {
-                        parsedOrbDatabase.push({
-                            id: card.id,
-                            name: card.name,
-                            setCode: card.setCode,
-                            descriptors: des
-                        });
-                        successCount++;
-                    } else {
-                        if (!firstError) firstError = "Image lacks distinct features";
-                        failCount++;
-                    }
-                    mat.delete(); gray.delete(); kp.delete();
-                } catch(e) {
-                    // Catch the exact reason the image broke
-                    if (!firstError) firstError = e.message;
-                    failCount++;
-                }
-            }
-            orb.delete();
-            
-            if (failCount > 0) {
-                // Keep the warning on screen so you can read it!
-                statusEl.innerText = `ORB Ready: ${successCount} success, ${failCount} failed. (Reason: ${firstError})`;
-            } else {
-                statusEl.innerText = `ORB Database Ready! ✅ (${successCount} successful)`;
-                // Hide it after 5 seconds if everything went perfectly
-                setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
-            }
+    for (let i = 0; i < rawDb.length; i++) {
+        let card = rawDb[i];
+        
+        // Notice we are NOT loading an image or running detectAndCompute here!
+        // We just instantly reconstruct the math from the string.
+        let des = convertStringToDescriptor(card.orbCode);
+        
+        if (des && !des.empty()) {
+            parsedOrbDatabase.push({
+                id: card.id,
+                name: card.name,
+                setCode: card.setCode,
+                descriptors: des // The BFMatcher needs this!
+            });
+            successCount++;
+        } else {
+            failCount++;
         }
+    }
+    
+    if (failCount > 0) {
+        statusMsg.style.color = "#ffcb05";
+        statusEl.innerText = `ORB Ready: ${successCount} loaded, ${failCount} failed to parse.`;
+    } else {
+        statusMsg.style.color = "#2ecc71";
+        statusEl.innerText = `ORB Database Ready! ⚡ (${successCount} loaded instantly)`;
+        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+}
 
         async function attemptRegister() {
             const user = document.getElementById('reg-username').value.trim();
@@ -1196,6 +1181,34 @@
                 btn.disabled = false;
             }
         }
+        // Run this when your app loads the database from Google Sheets
+function convertStringToDescriptor(descriptorString) {
+    if (!descriptorString || !descriptorString.includes('|')) return null;
+    
+    try {
+        let parts = descriptorString.split('|');
+        let dims = parts[0].split(',');
+        let rows = parseInt(dims[0]);
+        let cols = parseInt(dims[1]);
+        let type = parseInt(dims[2]);
+        let base64Data = parts[1];
+        
+        // Convert Base64 back to raw bytes
+        let binary = atob(base64Data);
+        let data = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            data[i] = binary.charCodeAt(i);
+        }
+        
+        // Rebuild the OpenCV Mat object
+        let mat = new cv.Mat(rows, cols, type);
+        mat.data.set(data);
+        return mat;
+    } catch (e) {
+        console.error("Failed to parse ORB descriptor:", e);
+        return null;
+    }
+}
     </script>
 </body>
 </html>
