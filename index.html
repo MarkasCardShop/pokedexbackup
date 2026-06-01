@@ -390,80 +390,45 @@
         }
 
         // Triggered when the main app screen opens
+        // Triggered when the main app screen opens
         async function loadOrbDatabase() {
-            const statusEl = document.getElementById('status-msg');
-            statusEl.innerText = "Step 1: Downloading ORB data from Google...";
-            statusEl.style.display = 'block';
-
             try {
                 const response = await apiCall('getGlobalOrbData', {}); 
                 
-                if (!response.success) {
-                    statusEl.innerText = "Backend Error: 'getGlobalOrbData' route is missing in Code.gs doPost!";
-                    return;
+                if (response.success && response.orbDatabase && response.orbDatabase.length > 0 && response.orbDatabase[0].id !== "ERROR") {
+                    await parseOrbImages(response.orbDatabase);
+                } else {
+                    console.error("ORB Data failed to load or was empty.");
                 }
-
-                if (!response.orbDatabase || response.orbDatabase.length === 0) {
-                    statusEl.innerText = "Sheet Error: Connected, but found 0 cards. Check Sheet ID!";
-                    return;
-                }
-
-                if (response.orbDatabase[0].id === "ERROR") {
-                    statusEl.innerText = "Google Apps Script Error: " + response.orbDatabase[0].name;
-                    return;
-                }
-                
-                statusEl.innerText = `Step 2: Downloaded ${response.orbDatabase.length} cards. Booting OpenCV...`;
-                await parseOrbImages(response.orbDatabase, statusEl);
-                
             } catch (error) {
-                statusEl.innerText = "Network Error downloading ORB data.";
+                console.error("Network Error downloading ORB data.", error);
             }
         }
 
-        // Quietly convert PNG strings into OpenCV math
-        async function parseOrbImages(rawDb, statusEl) {
-    parsedOrbDatabase = [];
-    
-    if (typeof cv === 'undefined' || !cv.Mat) {
-        statusEl.innerText = "Waiting for OpenCV to load...";
-        setTimeout(() => parseOrbImages(rawDb, statusEl), 1000);
-        return;
-    }
+        // Quietly convert strings into OpenCV math
+        async function parseOrbImages(rawDb) {
+            parsedOrbDatabase = [];
+            
+            if (typeof cv === 'undefined' || !cv.Mat) {
+                setTimeout(() => parseOrbImages(rawDb), 1000);
+                return;
+            }
 
-    statusEl.innerText = `Step 3: Loading ${rawDb.length} ORB signatures...`;
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < rawDb.length; i++) {
-        let card = rawDb[i];
-        
-        // Notice we are NOT loading an image or running detectAndCompute here!
-        // We just instantly reconstruct the math from the string.
-        let des = convertStringToDescriptor(card.orbCode);
-        
-        if (des && !des.empty()) {
-            parsedOrbDatabase.push({
-                id: card.id,
-                name: card.name,
-                setCode: card.setCode,
-                descriptors: des // The BFMatcher needs this!
-            });
-            successCount++;
-        } else {
-            failCount++;
+            for (let i = 0; i < rawDb.length; i++) {
+                let card = rawDb[i];
+                let des = convertStringToDescriptor(card.orbCode);
+                
+                if (des && !des.empty()) {
+                    parsedOrbDatabase.push({
+                        id: card.id,
+                        name: card.name,
+                        setCode: card.setCode,
+                        descriptors: des
+                    });
+                }
+            }
+            console.log(`ORB Database Ready in background! Loaded ${parsedOrbDatabase.length} cards.`);
         }
-    }
-    
-    if (failCount > 0) {
-        statusMsg.style.color = "#ffcb05";
-        statusEl.innerText = `ORB Ready: ${successCount} loaded, ${failCount} failed to parse.`;
-    } else {
-        statusMsg.style.color = "#2ecc71";
-        statusEl.innerText = `ORB Database Ready! ⚡ (${successCount} loaded instantly)`;
-        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
-    }
-}
 
         async function attemptRegister() {
             const user = document.getElementById('reg-username').value.trim();
@@ -1082,104 +1047,104 @@
         }
 
         async function processOrbScan(canvas, statusMsg, btn) {
-            statusMsg.innerText = "Running Global ORB Match...";
-            statusMsg.style.color = "#fff";
+            // 1. Show the text immediately
+            statusMsg.innerText = "Matching the card...";
+            statusMsg.style.color = "#ffcb05";
             btn.disabled = true;
 
-            if (parsedOrbDatabase.length === 0) {
-                statusMsg.innerText = "Error: Database is empty or still loading in the background.";
-                statusMsg.style.color = "#ff6b6b";
-                btn.disabled = false;
-                return;
-            }
-
-            try {
-                let src = cv.imread(canvas);
-                let gray = new cv.Mat();
-                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-                let orb = new cv.ORB(500); 
-                let kp = new cv.KeyPointVector();
-                let liveDes = new cv.Mat();
-                orb.detectAndCompute(gray, new cv.Mat(), kp, liveDes);
-
-                if (liveDes.empty()) {
-                    statusMsg.innerText = "No features detected. Ensure good lighting and retake.";
+            // 2. Pause for 50 milliseconds so the browser actually draws the text on screen
+            setTimeout(async () => {
+                if (parsedOrbDatabase.length === 0) {
+                    statusMsg.innerText = "Error: Database is empty or still loading.";
                     statusMsg.style.color = "#ff6b6b";
                     btn.disabled = false;
-                    src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete();
                     return;
                 }
 
-                let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
-                let bestMatch = null;
-                let maxGoodMatches = 0;
+                try {
+                    let src = cv.imread(canvas);
+                    let gray = new cv.Mat();
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-                for (let i = 0; i < parsedOrbDatabase.length; i++) {
-                    let dbItem = parsedOrbDatabase[i];
-                    let matches = new cv.DMatchVector();
-                    
-                    try {
-                        bf.match(liveDes, dbItem.descriptors, matches);
-                        
-                        let goodMatches = 0;
-                        for (let j = 0; j < matches.size(); j++) {
-                            if (matches.get(j).distance < 50) { 
-                                goodMatches++;
-                            }
-                        }
+                    let orb = new cv.ORB(500); 
+                    let kp = new cv.KeyPointVector();
+                    let liveDes = new cv.Mat();
+                    orb.detectAndCompute(gray, new cv.Mat(), kp, liveDes);
 
-                        if (goodMatches > maxGoodMatches) {
-                            maxGoodMatches = goodMatches;
-                            bestMatch = dbItem;
-                        }
-                    } catch (matchErr) {}
-                    matches.delete();
-                }
-
-                if (bestMatch && maxGoodMatches > 15) {
-                    statusMsg.innerText = `Global Match: ${bestMatch.name} [${bestMatch.setCode}]!`;
-                    statusMsg.style.color = "#2ecc71";
-                    
-                    // --- THE FIX STARTS HERE ---
-                    // 1. Look up the real Set Name (e.g., "Festival Terastal") using the Set Code (e.g., "SV8A")
-                    let uppercaseSetCode = bestMatch.setCode.toUpperCase();
-                    let targetSeriesName = bestMatch.setCode; // Fallback just in case
-                    
-                    if (typeof setCodeMap !== 'undefined' && setCodeMap[uppercaseSetCode]) {
-                        targetSeriesName = setCodeMap[uppercaseSetCode];
-                    }
-                    
-                    // 2. Change the dropdown using the translated Set Name
-                    if (currentSeries !== targetSeriesName) {
-                        document.getElementById('seriesSelect').value = targetSeriesName;
-                        await changeSeries(); 
-                    }
-                    // --- THE FIX ENDS HERE ---
-                    
-                    document.getElementById('searchInput').value = bestMatch.id;
-                    filterCards(); 
-                    
-                    setTimeout(() => {
-                        closeScanner();
-                        btn.innerText = "Scan Camera";
+                    if (liveDes.empty()) {
+                        statusMsg.innerText = "No features detected. Ensure good lighting and retake.";
+                        statusMsg.style.color = "#ff6b6b";
                         btn.disabled = false;
-                    }, 1500);
-                    
-                } else {
-                    statusMsg.innerText = `No confident match found. (Highest: ${maxGoodMatches})`;
-                    statusMsg.style.color = "#ffcb05";
+                        src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete();
+                        return;
+                    }
+
+                    let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+                    let bestMatch = null;
+                    let maxGoodMatches = 0;
+
+                    for (let i = 0; i < parsedOrbDatabase.length; i++) {
+                        let dbItem = parsedOrbDatabase[i];
+                        let matches = new cv.DMatchVector();
+                        
+                        try {
+                            bf.match(liveDes, dbItem.descriptors, matches);
+                            
+                            let goodMatches = 0;
+                            for (let j = 0; j < matches.size(); j++) {
+                                if (matches.get(j).distance < 50) { 
+                                    goodMatches++;
+                                }
+                            }
+
+                            if (goodMatches > maxGoodMatches) {
+                                maxGoodMatches = goodMatches;
+                                bestMatch = dbItem;
+                            }
+                        } catch (matchErr) {}
+                        matches.delete();
+                    }
+
+                    if (bestMatch && maxGoodMatches > 15) {
+                        statusMsg.innerText = `Match Found: ${bestMatch.name}!`;
+                        statusMsg.style.color = "#2ecc71";
+                        
+                        let uppercaseSetCode = bestMatch.setCode.toUpperCase();
+                        let targetSeriesName = bestMatch.setCode; 
+                        
+                        if (typeof setCodeMap !== 'undefined' && setCodeMap[uppercaseSetCode]) {
+                            targetSeriesName = setCodeMap[uppercaseSetCode];
+                        }
+                        
+                        if (currentSeries !== targetSeriesName) {
+                            document.getElementById('seriesSelect').value = targetSeriesName;
+                            await changeSeries(); 
+                        }
+                        
+                        document.getElementById('searchInput').value = bestMatch.id;
+                        filterCards(); 
+                        
+                        setTimeout(() => {
+                            closeScanner();
+                            btn.innerText = "Scan Camera";
+                            btn.disabled = false;
+                        }, 1500);
+                        
+                    } else {
+                        statusMsg.innerText = `No confident match found.`;
+                        statusMsg.style.color = "#ffcb05";
+                        btn.disabled = false;
+                    }
+
+                    src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete(); bf.delete();
+
+                } catch (error) {
+                    console.error("ORB Scan Error:", error);
+                    statusMsg.innerText = "Image Processing Error.";
+                    statusMsg.style.color = "#ff6b6b";
                     btn.disabled = false;
                 }
-
-                src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete(); bf.delete();
-
-            } catch (error) {
-                console.error("ORB Scan Error:", error);
-                statusMsg.innerText = "Image Processing Error.";
-                statusMsg.style.color = "#ff6b6b";
-                btn.disabled = false;
-            }
+            }, 50); // End of the 50ms pause
         }
         // Run this when your app loads the database from Google Sheets
 function convertStringToDescriptor(descriptorString) {
