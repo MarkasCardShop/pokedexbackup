@@ -373,41 +373,52 @@
             });
         }
 
+        // Triggered when the main app screen opens
         async function loadOrbDatabase() {
-            console.log("Downloading Global ORB database...");
+            const statusEl = document.getElementById('status-msg');
+            statusEl.innerText = "Step 1: Downloading ORB data from Google...";
+            statusEl.style.display = 'block';
+
             try {
                 const response = await apiCall('getGlobalOrbData', {}); 
                 
-                // If it successfully fetched cards
-                if (response.success && response.orbDatabase && response.orbDatabase.length > 0) {
-                    
-                    // Check if it returned a backend error masquerading as data
-                    if(response.orbDatabase[0].id === "ERROR") {
-                        alert("Google Sheet Error: " + response.orbDatabase[0].name);
-                        return;
-                    }
-                    
-                    console.log(`Downloaded ${response.orbDatabase.length} cards. Processing images...`);
-                    await parseOrbImages(response.orbDatabase);
-                } else {
-                    // This will pop up if it pulled 0 cards
-                    alert(`Database Issue: Backend returned 0 cards. Check your ORB_SHEET_ID and make sure you deployed as a 'New Version'.`);
+                if (!response.success) {
+                    statusEl.innerText = "Backend Error: 'getGlobalOrbData' route is missing in Code.gs doPost!";
+                    return;
                 }
+
+                if (!response.orbDatabase || response.orbDatabase.length === 0) {
+                    statusEl.innerText = "Sheet Error: Connected, but found 0 cards. Check Sheet ID!";
+                    return;
+                }
+
+                if (response.orbDatabase[0].id === "ERROR") {
+                    statusEl.innerText = "Google Apps Script Error: " + response.orbDatabase[0].name;
+                    return;
+                }
+                
+                statusEl.innerText = `Step 2: Downloaded ${response.orbDatabase.length} cards. Booting OpenCV...`;
+                await parseOrbImages(response.orbDatabase, statusEl);
+                
             } catch (error) {
-                alert("Network Error: Could not connect to Google Apps Script.");
-                console.error("Network Error downloading ORB:", error);
+                statusEl.innerText = "Network Error downloading ORB data.";
             }
         }
 
-        async function parseOrbImages(rawDb) {
+        // Quietly convert PNG strings into OpenCV math
+        async function parseOrbImages(rawDb, statusEl) {
             parsedOrbDatabase = [];
             
             if (typeof cv === 'undefined' || !cv.Mat) {
-                setTimeout(() => parseOrbImages(rawDb), 1000);
+                statusEl.innerText = "Waiting for OpenCV to load...";
+                setTimeout(() => parseOrbImages(rawDb, statusEl), 1000);
                 return;
             }
 
+            statusEl.innerText = `Step 3: Processing ${rawDb.length} images (this takes a few seconds)...`;
             let orb = new cv.ORB(500);
+            let successCount = 0;
+            let failCount = 0;
 
             for (let i = 0; i < rawDb.length; i++) {
                 let card = rawDb[i];
@@ -428,14 +439,23 @@
                             setCode: card.setCode,
                             descriptors: des
                         });
+                        successCount++;
+                    } else {
+                        failCount++;
                     }
                     mat.delete(); gray.delete(); kp.delete();
                 } catch(e) {
-                    console.warn(`Skipped ${card.name}`);
+                    failCount++;
                 }
             }
             orb.delete();
-            console.log(`Successfully pre-loaded ${parsedOrbDatabase.length} ORB signatures!`);
+            
+            statusEl.innerText = `ORB Database Ready! ✅ (${successCount} successful, ${failCount} failed)`;
+            
+            // Hide the message after 5 seconds so the UI looks clean again
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
         }
 
         async function attemptRegister() {
@@ -495,6 +515,7 @@
                 document.getElementById('admin-panel').style.display = 'none';
             }
             initializeApp();
+            loadOrbDatabase();
         }
     
         function openSettings() { document.getElementById('settingsModal').style.display = "block"; }
