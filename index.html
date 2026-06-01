@@ -1156,10 +1156,21 @@
                     statusMsg.innerText = `Global Match: ${bestMatch.name} [${bestMatch.setCode}]!`;
                     statusMsg.style.color = "#2ecc71";
                     
-                    if (currentSeries !== bestMatch.setCode) {
-                        document.getElementById('seriesSelect').value = bestMatch.setCode;
+                    // --- THE FIX STARTS HERE ---
+                    // 1. Look up the real Set Name (e.g., "Festival Terastal") using the Set Code (e.g., "SV8A")
+                    let uppercaseSetCode = bestMatch.setCode.toUpperCase();
+                    let targetSeriesName = bestMatch.setCode; // Fallback just in case
+                    
+                    if (typeof setCodeMap !== 'undefined' && setCodeMap[uppercaseSetCode]) {
+                        targetSeriesName = setCodeMap[uppercaseSetCode];
+                    }
+                    
+                    // 2. Change the dropdown using the translated Set Name
+                    if (currentSeries !== targetSeriesName) {
+                        document.getElementById('seriesSelect').value = targetSeriesName;
                         await changeSeries(); 
                     }
+                    // --- THE FIX ENDS HERE ---
                     
                     document.getElementById('searchInput').value = bestMatch.id;
                     filterCards(); 
