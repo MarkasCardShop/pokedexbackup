@@ -318,8 +318,22 @@
             let orbDatabase = [];
             let currentScanMode = 'ocr';
             document.addEventListener('DOMContentLoaded', () => {
-                loadSetDataFromSheet();
-                if (userSheetId) showAppScreen();
+    loadSetDataFromSheet();
+    loadOrbDatabase(); // <--- ADD THIS LINE HERE!
+    if (userSheetId) showAppScreen();
+
+    // --- NEW: Trigger login when pressing Enter ---
+    const triggerLoginOnEnter = (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault(); // Prevents unexpected form behavior
+            attemptLogin();
+        }
+    };
+    
+    // Listen for Enter on both the username and PIN fields
+    document.getElementById('log-username').addEventListener('keypress', triggerLoginOnEnter);
+    document.getElementById('log-pin').addEventListener('keypress', triggerLoginOnEnter);
+});
     
                 // --- NEW: Trigger login when pressing Enter ---
                 const triggerLoginOnEnter = (event) => {
