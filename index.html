@@ -604,7 +604,10 @@
             if(seriesList.length > 0) { currentSeries = seriesList[seriesList.length - 1]; select.value = currentSeries; loadCardsForSeries(); }
         }
     
-        function changeSeries() { currentSeries = document.getElementById('seriesSelect').value; loadCardsForSeries(); }
+        async function changeSeries() { 
+        currentSeries = document.getElementById('seriesSelect').value; 
+        await loadCardsForSeries(); 
+        }
     
         async function loadCardsForSeries() {
             document.getElementById('status-msg').innerText = `Syncing ${currentSeries} Data...`;
@@ -1099,7 +1102,18 @@
                 console.error("Network error loading sets:", error);
             }
         }
-
+        function getSetNameFromCode(rawCode) {
+            if (!rawCode) return "";
+            let cleanCode = rawCode.trim().toLowerCase();
+            if (typeof setCodeMap !== 'undefined') {
+                for (let key in setCodeMap) {
+                    if (key.trim().toLowerCase() === cleanCode) {
+                        return setCodeMap[key];
+                    }
+                }
+            }
+            return rawCode; // Fallback if not found
+        }
         async function processOrbScan(canvas, statusMsg, btn) {
             // Get your video element (change 'video' to your actual video element ID if different)
             const videoEl = document.getElementById('camera-stream');
@@ -1176,22 +1190,23 @@
                         statusMsg.innerText = `Match Found: ${bestMatch.name}!`;
                         statusMsg.style.color = "#2ecc71";
                         
-                        let uppercaseSetCode = bestMatch.setCode.toUpperCase();
-                        let targetSeriesName = bestMatch.setCode; 
+                        // 1. Use the new Smart Matcher to get the exact Set Name
+                        let targetSeriesName = getSetNameFromCode(bestMatch.setCode);
+                        const seriesSelect = document.getElementById('seriesSelect');
                         
-                        if (typeof setCodeMap !== 'undefined' && setCodeMap[uppercaseSetCode]) {
-                            targetSeriesName = setCodeMap[uppercaseSetCode];
-                        }
+                        // 2. Safety Check: Ensure this set actually exists in your dropdown
+                        let optionExists = Array.from(seriesSelect.options).some(opt => opt.value === targetSeriesName);
                         
-                        if (currentSeries !== targetSeriesName) {
-                            document.getElementById('seriesSelect').value = targetSeriesName;
+                        if (optionExists && currentSeries !== targetSeriesName) {
+                            seriesSelect.value = targetSeriesName;
+                            // 3. WAIT perfectly for the new cards to download
                             await changeSeries(); 
                         }
                         
+                        // 4. Now that the correct cards are loaded, filter by ID
                         document.getElementById('searchInput').value = bestMatch.id;
                         filterCards(); 
                         
-                        // Keep camera frozen while closing out
                         setTimeout(() => {
                             closeScanner();
                             btn.innerText = "Scan Camera";
