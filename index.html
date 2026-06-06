@@ -277,21 +277,25 @@
                 <span class="close" onclick="closeScanner()" style="position: absolute; right: 20px; top: 10px; z-index: 10;">&times;</span>
                 <h3 style="color: #ffcb05; margin-top: 10px;">POKÉDEX SCANNER</h3>
                 
+                <div id="db-status-badge" style="background-color: #e3350d; color: white; padding: 5px 15px; border-radius: 8px; font-weight: 900; margin-bottom: 15px; display: inline-block; border: 2px solid #fff; font-size: 0.9em;">
+                    ⏳ DB STATUS: LOADING...
+                </div>
+                
                 <div style="position: relative; width: 100%; max-height: 400px; border: 3px solid #444; border-radius: 8px; background: #000; line-height: 0; margin-bottom: 15px; overflow: hidden; display: flex; justify-content: center; align-items: center;">
-    <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto; max-height: 100%; object-fit: contain;"></video>
-    <div class="alignment-frame" id="alignmentFrame">
-        <div class="crop-frame" id="cropBox"></div>
-    </div>
-</div>
+                    <video id="camera-stream" autoplay playsinline style="width: 100%; height: auto; max-height: 100%; object-fit: contain;"></video>
+                    <div class="alignment-frame" id="alignmentFrame">
+                        <div class="crop-frame" id="cropBox"></div>
+                    </div>
+                </div>
                 
                 <canvas id="snapshot-canvas" style="display: none;"></canvas>
         
                 <div id="scan-status" style="margin: 15px 0; font-weight: bold; color: #fff; text-align: center;">Align the card inside the yellow box!</div>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; flex: 1;">Scan Camera</button>
+                    <button class="main-btn" id="capture-btn" onclick="captureAndScan()" style="margin-top: 0; flex: 1;" disabled>Scan Camera</button>
                     <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
-                    <button class="main-btn" onclick="document.getElementById('image-upload').click()" style="margin-top: 0; flex: 1; background-color: #2a75bb; color: #ffcb05; border-color: #ffcb05;">Upload Image</button>
+                    <button class="main-btn" id="upload-btn" onclick="document.getElementById('image-upload').click()" style="margin-top: 0; flex: 1; background-color: #2a75bb; color: #ffcb05; border-color: #ffcb05;" disabled>Upload Image</button>
                 </div>
             </div>
         </div>
@@ -467,6 +471,7 @@
         }
 
         // Quietly convert strings into OpenCV math
+        // Quietly convert strings into OpenCV math
         async function parseOrbImages(rawDb) {
             parsedOrbDatabase = [];
             
@@ -489,6 +494,19 @@
                 }
             }
             console.log(`ORB Database Ready in background! Loaded ${parsedOrbDatabase.length} cards.`);
+            
+            // --- NEW: UNLOCK SCANNER UI ---
+            const dbBadge = document.getElementById('db-status-badge');
+            const capBtn = document.getElementById('capture-btn');
+            const upBtn = document.getElementById('upload-btn');
+            
+            if (dbBadge) {
+                dbBadge.style.backgroundColor = '#2ecc71'; // Turn Green
+                dbBadge.innerText = `✅ DB READY (${parsedOrbDatabase.length} CARDS)`;
+            }
+            if (capBtn) capBtn.disabled = false;
+            if (upBtn) upBtn.disabled = false;
+            // ------------------------------
         }
 
         async function attemptRegister() {
