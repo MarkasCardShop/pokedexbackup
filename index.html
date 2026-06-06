@@ -1092,21 +1092,21 @@
                 cropCanvas.height = cropHeight;
                 cropCanvas.getContext('2d').drawImage(video, startX, startY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
             } else {
-                cropCanvas = canvas; // Fallback if cropBox is missing
+                cropCanvas = canvas;
             }
 
             // Freeze the live camera
             if (video) video.pause();
 
-            // Fire off the smart scan (No Gemini required!)
             await smartTargetedScan(cropCanvas, canvas, statusMsg, btn, video);
         }
 
         async function smartTargetedScan(cropCanvas, fullCanvas, statusMsg, btn, videoEl) {
-            statusMsg.innerText = "OCR: Reading Set Number...";
+            statusMsg.innerText = "OCR: Reading Number/Set...";
             statusMsg.style.color = "#ffcb05";
 
             let targetSetNames = []; 
+            let targetCardId = null;
 
             try {
                 // Apply high-contrast filter to the tiny cropped section
@@ -1116,32 +1116,34 @@
                 const text = result.data.text;
                 console.log("Cropped OCR Output:", text);
                 
-                // Look for the AAA/BBB format
-                const fractionMatch = text.match(/\d{1,3}\s*\/\s*(\d{1,3})/);
+                // NEW: Capture both AAA (Card ID) and BBB (Total Cards)
+                const fractionMatch = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
                 
-                if (fractionMatch && typeof setTotalMap !== 'undefined') {
-                    const bbb = fractionMatch[1].padStart(3, '0');
-                    if (setTotalMap[bbb] && setTotalMap[bbb].length > 0) {
-                        targetSetNames = setTotalMap[bbb]; // Grab the array of potential sets
-                        statusMsg.innerText = `Matched Total (${bbb}) to ${targetSetNames.length} Set(s). Filtering ORB...`;
+                if (fractionMatch) {
+                    targetCardId = fractionMatch[1].padStart(3, '0'); // AAA
+                    const bbb = fractionMatch[2].padStart(3, '0');    // BBB
+                    
+                    if (typeof setTotalMap !== 'undefined' && setTotalMap[bbb] && setTotalMap[bbb].length > 0) {
+                        targetSetNames = setTotalMap[bbb]; 
+                        statusMsg.innerText = `OCR read ${targetCardId}/${bbb}. Verifying...`;
                     } else {
-                        statusMsg.innerText = `OCR read /${bbb} but set unknown. Scanning ALL sets...`;
+                        statusMsg.innerText = `OCR read ${targetCardId}/${bbb} but set is unknown.`;
                     }
                 } else {
-                    statusMsg.innerText = "OCR: No set number found. Scanning ALL sets...";
+                    statusMsg.innerText = "OCR: No numbers found. Full scan queued...";
                 }
             } catch (error) {
                 console.error("OCR Error:", error);
-                statusMsg.innerText = "OCR failed. Scanning ALL sets...";
+                statusMsg.innerText = "OCR failed. Full scan queued...";
             }
 
-            // Small delay to let the UI update, then launch ORB
+            // Small delay to let the UI update, then launch the progressive ORB
             setTimeout(async () => {
-                await executeOrbMatching(fullCanvas, targetSetNames, statusMsg, btn, videoEl);
+                await executeOrbMatching(fullCanvas, targetSetNames, targetCardId, statusMsg, btn, videoEl);
             }, 50);
         }
 
-        async function executeOrbMatching(canvas, targetSetNames, statusMsg, btn, videoEl) {
+        async function executeOrbMatching(canvas, targetSetNames, targetCardId, statusMsg, btn, videoEl) {
             if (parsedOrbDatabase.length === 0) {
                 statusMsg.innerText = "Error: Database is empty or still loading.";
                 statusMsg.style.color = "#ff6b6b";
@@ -1170,39 +1172,89 @@
                 }
 
                 let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+                
+                // Helper function to match against a specific subset of cards
+                function matchSubset(subset) {
+                    let best = null;
+                    let max = 0;
+                    for (let i = 0; i < subset.length; i++) {
+                        let matches = new cv.DMatchVector();
+                        try {
+                            bf.match(liveDes, subset[i].descriptors, matches);
+                            let goodMatches = 0;
+                            for (let j = 0; j < matches.size(); j++) {
+                                if (matches.get(j).distance < 50) goodMatches++;
+                            }
+                            if (goodMatches > max) {
+                                max = goodMatches;
+                                best = subset[i];
+                            }
+                        } catch (matchErr) {}
+                        matches.delete();
+                    }
+                    return { best, max };
+                }
+
                 let bestMatch = null;
                 let maxGoodMatches = 0;
 
-                for (let i = 0; i < parsedOrbDatabase.length; i++) {
-                    let dbItem = parsedOrbDatabase[i];
+                // ==========================================
+                // PASS 1: Exact AAA ID inside exact BBB Set(s)
+                // ==========================================
+                if (targetSetNames.length > 0 && targetCardId) {
+                    statusMsg.innerText = `Fast Pass: Verifying Card #${targetCardId}...`;
+                    await new Promise(r => setTimeout(r, 10)); // Force UI to update
                     
-                    // --- THE SMART FILTER ---
-                    if (targetSetNames.length > 0) {
-                        let dbSetName = getSetNameFromCode(dbItem.setCode);
-                        if (!targetSetNames.includes(dbSetName)) {
-                            continue; // Skip calculating heavy math if the set doesn't match!
-                        }
+                    let exactSubset = parsedOrbDatabase.filter(item => 
+                        targetSetNames.includes(getSetNameFromCode(item.setCode)) && item.id === targetCardId
+                    );
+                    
+                    let pass1 = matchSubset(exactSubset);
+                    if (pass1.max > 15) {
+                        bestMatch = pass1.best;
+                        maxGoodMatches = pass1.max;
                     }
-
-                    let matches = new cv.DMatchVector();
-                    try {
-                        bf.match(liveDes, dbItem.descriptors, matches);
-                        let goodMatches = 0;
-                        for (let j = 0; j < matches.size(); j++) {
-                            if (matches.get(j).distance < 50) goodMatches++;
-                        }
-
-                        if (goodMatches > maxGoodMatches) {
-                            maxGoodMatches = goodMatches;
-                            bestMatch = dbItem;
-                        }
-                    } catch (matchErr) {}
-                    matches.delete();
                 }
 
+                // ==========================================
+                // PASS 2: All Cards inside BBB Set(s)
+                // ==========================================
+                if (!bestMatch && targetSetNames.length > 0) {
+                    statusMsg.innerText = `Fast Pass Missed. Scanning full set...`;
+                    await new Promise(r => setTimeout(r, 10)); // Force UI to update
+                    
+                    let setSubset = parsedOrbDatabase.filter(item => 
+                        targetSetNames.includes(getSetNameFromCode(item.setCode))
+                    );
+                    
+                    let pass2 = matchSubset(setSubset);
+                    if (pass2.max > 15) {
+                        bestMatch = pass2.best;
+                        maxGoodMatches = pass2.max;
+                    }
+                }
+
+                // ==========================================
+                // PASS 3: Fallback to Entire Database
+                // ==========================================
+                if (!bestMatch) {
+                    statusMsg.innerText = `Set scan failed. Scanning entire database...`;
+                    await new Promise(r => setTimeout(r, 10)); // Force UI to update
+                    
+                    let pass3 = matchSubset(parsedOrbDatabase);
+                    if (pass3.max > 15) {
+                        bestMatch = pass3.best;
+                        maxGoodMatches = pass3.max;
+                    }
+                }
+
+                // Memory Cleanup
                 src.delete(); gray.delete(); orb.delete(); kp.delete(); liveDes.delete(); bf.delete();
 
-                if (bestMatch && maxGoodMatches > 15) {
+                // ==========================================
+                // RESOLVE RESULTS
+                // ==========================================
+                if (bestMatch) {
                     statusMsg.innerText = `Match Found: ${bestMatch.name}!`;
                     statusMsg.style.color = "#2ecc71";
                     
@@ -1224,7 +1276,6 @@
                         btn.disabled = false;
                     }, 1500);
                 } else {
-                    // ORB missed completely. Unfreeze and let them try again.
                     statusMsg.innerText = "No confident match found. Try again.";
                     statusMsg.style.color = "#ffcb05";
                     btn.innerText = "Try Again";
@@ -1240,7 +1291,7 @@
                 btn.disabled = false;
                 if (videoEl) videoEl.play();
             }
-        } 
+        }
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
